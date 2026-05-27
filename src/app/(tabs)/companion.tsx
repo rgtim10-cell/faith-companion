@@ -291,12 +291,12 @@ const styles = StyleSheet.create({
     paddingHorizontal: Spacing.xxxl,
   },
   welcomeIcon: {
-    width: 96,
-    height: 96,
-    borderRadius: 48,
+    width: 100,
+    height: 100,
+    borderRadius: 50,
     alignItems: 'center',
     justifyContent: 'center',
-    marginBottom: Spacing.xl,
+    marginBottom: Spacing.xxl,
   },
   welcomeTitle: {
     ...Typography.heading,
@@ -346,9 +346,9 @@ const styles = StyleSheet.create({
   },
   messageBubble: {
     maxWidth: '75%',
-    paddingHorizontal: Spacing.lg,
-    paddingVertical: Spacing.md,
-    borderRadius: BorderRadius.lg,
+    paddingHorizontal: Spacing.xl,
+    paddingVertical: Spacing.lg,
+    borderRadius: BorderRadius.xl,
   },
   messageText: {
     ...Typography.body,

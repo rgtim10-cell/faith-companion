@@ -27,16 +27,16 @@ const CATEGORY_ICONS: Record<string, keyof typeof Ionicons.glyphMap> = {
 };
 
 const CATEGORY_COLORS: Record<string, string> = {
-  gratitude: '#E8A87C',
-  petition: '#6B5CE7',
-  intercession: '#41B3A3',
-  confession: '#F2994A',
-  praise: '#667eea',
-  healing: '#10B981',
-  guidance: '#764ba2',
-  protection: '#3B82F6',
-  thanksgiving: '#F59E0B',
-  other: '#9CA3AF',
+  gratitude: '#B45309',
+  petition: '#5B4CC4',
+  intercession: '#2D6A5F',
+  confession: '#C2410C',
+  praise: '#4338A0',
+  healing: '#059669',
+  guidance: '#6D28D9',
+  protection: '#1D4ED8',
+  thanksgiving: '#A16207',
+  other: '#78716C',
 };
 
 export function PrayerCard({ prayer, onPress, onFavorite, onMarkAnswered }: PrayerCardProps) {
@@ -106,8 +106,8 @@ export function PrayerCard({ prayer, onPress, onFavorite, onMarkAnswered }: Pray
 
 const styles = StyleSheet.create({
   container: {
-    borderRadius: BorderRadius.lg,
-    padding: Spacing.lg,
+    borderRadius: BorderRadius.xl,
+    padding: Spacing.xl,
     marginBottom: Spacing.md,
     borderWidth: 1,
   },

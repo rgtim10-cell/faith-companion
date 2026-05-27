@@ -15,16 +15,17 @@ export default function TabLayout() {
         tabBarInactiveTintColor: colors.textTertiary,
         tabBarStyle: {
           backgroundColor: colors.surface,
-          borderTopColor: colors.borderLight,
-          borderTopWidth: 1,
-          paddingBottom: Spacing.sm,
+          borderTopColor: colors.border,
+          borderTopWidth: StyleSheet.hairlineWidth,
+          paddingBottom: Spacing.md,
           paddingTop: Spacing.sm,
-          height: 88,
+          height: 92,
         },
         tabBarLabelStyle: {
           fontSize: 11,
           fontWeight: '600',
-          marginTop: 2,
+          marginTop: 4,
+          letterSpacing: 0.2,
         },
       }}
     >
@@ -82,16 +83,16 @@ export default function TabLayout() {
 
 const styles = StyleSheet.create({
   centerTab: {
-    width: 52,
-    height: 52,
-    borderRadius: 26,
+    width: 56,
+    height: 56,
+    borderRadius: 28,
     alignItems: 'center',
     justifyContent: 'center',
-    marginBottom: 20,
-    shadowColor: '#6B5CE7',
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.3,
-    shadowRadius: 8,
-    elevation: 8,
+    marginBottom: 22,
+    shadowColor: '#4338A0',
+    shadowOffset: { width: 0, height: 6 },
+    shadowOpacity: 0.35,
+    shadowRadius: 12,
+    elevation: 10,
   },
 });

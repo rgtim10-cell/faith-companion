@@ -59,7 +59,7 @@ export function SurfaceCard({ children, style, elevated }: SurfaceCardProps) {
 
 const styles = StyleSheet.create({
   card: {
-    borderRadius: BorderRadius.lg,
+    borderRadius: BorderRadius.xl,
     overflow: 'hidden',
   },
   padded: {

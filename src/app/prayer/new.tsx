@@ -298,14 +298,14 @@ const styles = StyleSheet.create({
   contentInput: {
     ...Typography.body,
     minHeight: 200,
-    padding: Spacing.lg,
-    borderRadius: BorderRadius.lg,
+    padding: Spacing.xl,
+    borderRadius: BorderRadius.xl,
     borderWidth: 1,
     marginBottom: Spacing.xl,
     lineHeight: 24,
   },
   aiButton: {
-    borderRadius: BorderRadius.lg,
+    borderRadius: BorderRadius.xl,
     overflow: 'hidden',
     marginBottom: Spacing.lg,
     ...Shadows.sm,

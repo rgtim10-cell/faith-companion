@@ -72,7 +72,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     paddingVertical: Spacing.md,
     paddingHorizontal: Spacing.lg,
-    borderRadius: BorderRadius.md,
+    borderRadius: BorderRadius.lg,
     borderWidth: 1.5,
     minWidth: 80,
   },
@@ -80,6 +80,7 @@ const styles = StyleSheet.create({
     paddingVertical: Spacing.sm,
     paddingHorizontal: Spacing.md,
     minWidth: 64,
+    borderRadius: BorderRadius.md,
   },
   emoji: {
     fontSize: 28,

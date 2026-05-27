@@ -260,8 +260,9 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   verseCard: {
-    marginBottom: Spacing.xl,
+    marginBottom: Spacing.xxl,
     padding: Spacing.xxl,
+    borderRadius: BorderRadius.xl,
   },
   verseHeader: {
     flexDirection: 'row',
@@ -287,21 +288,21 @@ const styles = StyleSheet.create({
   statsRow: {
     flexDirection: 'row',
     gap: Spacing.md,
-    marginBottom: Spacing.xl,
+    marginBottom: Spacing.xxl,
   },
   statCard: {
     flex: 1,
     alignItems: 'center',
-    paddingVertical: Spacing.lg,
+    paddingVertical: Spacing.xl,
     paddingHorizontal: Spacing.sm,
   },
   statIcon: {
-    width: 44,
-    height: 44,
-    borderRadius: 22,
+    width: 48,
+    height: 48,
+    borderRadius: 24,
     alignItems: 'center',
     justifyContent: 'center',
-    marginBottom: Spacing.sm,
+    marginBottom: Spacing.md,
   },
   statNumber: {
     ...Typography.heading,
@@ -311,8 +312,8 @@ const styles = StyleSheet.create({
     ...Typography.small,
   },
   quickPrayerButton: {
-    marginBottom: Spacing.xl,
-    borderRadius: BorderRadius.lg,
+    marginBottom: Spacing.xxl,
+    borderRadius: BorderRadius.xl,
     overflow: 'hidden',
     ...Shadows.md,
   },
@@ -320,15 +321,15 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    paddingVertical: Spacing.lg,
-    gap: Spacing.sm,
+    paddingVertical: Spacing.xl,
+    gap: Spacing.md,
   },
   quickPrayerText: {
     ...Typography.bodyMedium,
     color: '#FFFFFF',
   },
   moodCard: {
-    marginBottom: Spacing.xl,
+    marginBottom: Spacing.xxl,
   },
   moodHeader: {
     flexDirection: 'row',
@@ -346,8 +347,9 @@ const styles = StyleSheet.create({
     marginTop: 2,
   },
   encouragementCard: {
-    marginBottom: Spacing.xl,
+    marginBottom: Spacing.xxl,
     alignItems: 'center',
+    paddingVertical: Spacing.xxl,
   },
   encouragementIcon: {
     marginBottom: Spacing.md,
@@ -363,7 +365,7 @@ const styles = StyleSheet.create({
     lineHeight: 22,
   },
   section: {
-    marginBottom: Spacing.xl,
+    marginBottom: Spacing.xxl,
   },
   sectionHeader: {
     flexDirection: 'row',
@@ -378,8 +380,8 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     padding: Spacing.lg,
-    borderRadius: BorderRadius.md,
-    marginBottom: Spacing.sm,
+    borderRadius: BorderRadius.lg,
+    marginBottom: Spacing.md,
     borderWidth: 1,
   },
   recentPrayerContent: {
@@ -394,8 +396,8 @@ const styles = StyleSheet.create({
     ...Typography.caption,
   },
   aiCtaButton: {
-    marginBottom: Spacing.xl,
-    borderRadius: BorderRadius.xl,
+    marginBottom: Spacing.xxl,
+    borderRadius: BorderRadius.xxl,
     overflow: 'hidden',
     ...Shadows.lg,
   },
