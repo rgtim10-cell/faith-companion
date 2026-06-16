@@ -1,25 +1,27 @@
 {
   "expo": {
-    "name": "faith-companion",
-    "slug": "faith-companion",
+    "name": "OATH",
+    "slug": "oath",
     "version": "1.0.0",
     "orientation": "portrait",
-    "icon": "./assets/icon.png",
-    "userInterfaceStyle": "light",
+    "userInterfaceStyle": "dark",
+    "backgroundColor": "#04050A",
+    "splash": {
+      "backgroundColor": "#04050A"
+    },
     "ios": {
-      "supportsTablet": true
+      "supportsTablet": false,
+      "bundleIdentifier": "com.oath.app"
     },
     "android": {
+      "package": "com.oath.app",
       "adaptiveIcon": {
-        "backgroundColor": "#E6F4FE",
-        "foregroundImage": "./assets/android-icon-foreground.png",
-        "backgroundImage": "./assets/android-icon-background.png",
-        "monochromeImage": "./assets/android-icon-monochrome.png"
-      },
-      "predictiveBackGestureEnabled": false
+        "backgroundColor": "#04050A"
+      }
     },
-    "web": {
-      "favicon": "./assets/favicon.png"
-    }
+    "plugins": [
+      "expo-blur",
+      "expo-haptics"
+    ]
   }
 }
