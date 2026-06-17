@@ -106,15 +106,24 @@ function buildRawManifestations(
   }
 
   // ── Evidence ───────────────────────────────────────────────
+  // User-submitted evidence takes priority — their own proof first, always.
   if (evidences.length > 0) {
-    const records = (recentEvidence.length > 0 ? recentEvidence : evidences).slice(0, 3);
+    const userSubmitted = evidences.filter((m) => m.source === 'evidence_upload');
+    const recentUserSubmitted = recentEvidence.filter((m) => m.source === 'evidence_upload');
+    const pool = recentUserSubmitted.length > 0
+      ? recentUserSubmitted
+      : userSubmitted.length > 0
+      ? userSubmitted
+      : recentEvidence.length > 0
+      ? recentEvidence
+      : evidences;
     result.push({
       id: 'manifest_evidence',
       type: 'evidence',
       opening: covenant
         ? `You said you wanted to become someone you could be proud of.\nHere is proof you already are.`
-        : "Here is proof of your transformation.",
-      records,
+        : 'Here is proof of your transformation.',
+      records: pool.slice(0, 3),
       prompts: ['Connect this to my promise', 'Show me more like this', 'Why did you show me this?'],
       explanation:
         'I surface evidence when you have kept your word without realizing it. These are not coincidences — they are you, becoming.',

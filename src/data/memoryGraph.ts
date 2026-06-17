@@ -38,6 +38,8 @@ export interface MemoryRecord {
   linkedPromiseId?: string;
   source: 'covenant' | 'communion' | 'evidence_upload' | 'night_reflection' | 'oath_observed';
   realm?: RealmKey;
+  oathInterpretation?: string; // what OATH sees this evidence proves
+  imageUri?: string;           // 'placeholder' or real URI for photo evidence
 }
 
 export interface Covenant {

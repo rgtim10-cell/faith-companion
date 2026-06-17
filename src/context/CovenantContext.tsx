@@ -125,6 +125,8 @@ interface CovenantContextValue {
     linkedPromiseId?: string;
     source: MemoryRecord['source'];
     realm?: RealmKey;
+    oathInterpretation?: string;
+    imageUri?: string;
   }) => MemoryRecord;
   addFeedback: (input: Omit<ManifestationFeedback, 'date'>) => void;
 }
@@ -177,6 +179,8 @@ export function CovenantProvider({ children }: { children: React.ReactNode }) {
       linkedPromiseId?: string;
       source: MemoryRecord['source'];
       realm?: RealmKey;
+      oathInterpretation?: string;
+      imageUri?: string;
     }): MemoryRecord => {
       const record: MemoryRecord = {
         id: `mem_${Date.now()}`,
@@ -189,6 +193,8 @@ export function CovenantProvider({ children }: { children: React.ReactNode }) {
         linkedPromiseId: input.linkedPromiseId,
         source: input.source,
         realm: input.realm,
+        oathInterpretation: input.oathInterpretation,
+        imageUri: input.imageUri,
       };
       setMemories((prev) => {
         const next = [record, ...prev];
