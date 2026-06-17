@@ -16,7 +16,16 @@ export type ManifestationType =
   | 'drift'
   | 'future_self'
   | 'memory'
-  | 'learning';
+  | 'learning'
+  | 'chain'; // Evidence Chain — the full transformation arc
+
+export type FeedbackReaction = 'resonated' | 'not_relevant' | 'more' | 'disagree';
+
+export interface ManifestationFeedback {
+  type: ManifestationType;
+  reaction: FeedbackReaction;
+  date: number;
+}
 
 export interface MemoryRecord {
   id: string;
@@ -84,6 +93,7 @@ export const manifestationLabel: Record<ManifestationType, string> = {
   future_self: 'Future Self',
   memory: 'Memory',
   learning: 'Learning',
+  chain: 'Evidence Chain',
 };
 
 export const manifestationColor: Record<ManifestationType, string> = {
@@ -94,4 +104,5 @@ export const manifestationColor: Record<ManifestationType, string> = {
   future_self: '#4D8CFF',
   memory: '#FBBF24',
   learning: '#F472B6',
+  chain: '#D4A853',
 };

@@ -1,4 +1,11 @@
-import type { Covenant, Manifestation, MemoryRecord } from '@/data/memoryGraph';
+import type {
+  Covenant,
+  ManifestationFeedback,
+  ManifestationType,
+  Manifestation,
+  MemoryRecord,
+} from '@/data/memoryGraph';
+import { scoreManifestations } from '@/engine/manifestationScore';
 
 const DAY = 24 * 60 * 60 * 1000;
 
@@ -11,7 +18,55 @@ function daysAgo(date: number): number {
   return Math.round((Date.now() - date) / DAY);
 }
 
-export function buildManifestations(covenant: Covenant | null, memories: MemoryRecord[]): Manifestation[] {
+// Synthesize a MemoryRecord from the Covenant so it can participate in chain rendering.
+function covenantAsRecord(covenant: Covenant): MemoryRecord {
+  return {
+    id: `cov_record_${covenant.id}`,
+    type: 'promise',
+    title: 'Founding covenant',
+    content: covenant.promise,
+    date: covenant.createdAt,
+    emotionalWeight: 1,
+    tags: ['covenant'],
+    source: 'covenant',
+  };
+}
+
+/**
+ * Build all available manifestations, then sort by score so the first entry
+ * is always OATH's "Today's Most Important Experience."
+ */
+export function buildManifestations(
+  covenant: Covenant | null,
+  memories: MemoryRecord[],
+  feedback: ManifestationFeedback[] = [],
+): Manifestation[] {
+  const scores = scoreManifestations(memories, covenant, feedback);
+  const raw = buildRawManifestations(covenant, memories);
+
+  // Sort: highest score first. Ties keep insertion order (more relevant types listed first).
+  return raw.sort((a, b) => (scores[b.type] ?? 0) - (scores[a.type] ?? 0));
+}
+
+/**
+ * Force-surface a specific type for the trigger flows
+ * ("I need motivation" → confidence/evidence, "I'm drifting" → drift/truth).
+ */
+export function findManifestationOfType(
+  manifests: Manifestation[],
+  preferred: ManifestationType[],
+): number {
+  for (const type of preferred) {
+    const idx = manifests.findIndex((m) => m.type === type);
+    if (idx >= 0) return idx;
+  }
+  return 0;
+}
+
+function buildRawManifestations(
+  covenant: Covenant | null,
+  memories: MemoryRecord[],
+): Manifestation[] {
   const result: Manifestation[] = [];
 
   const evidences = memories.filter((m) => m.type === 'evidence');
@@ -23,27 +78,50 @@ export function buildManifestations(covenant: Covenant | null, memories: MemoryR
   const recentBreakthroughs = recentOf(memories, 'breakthrough', 21);
   const recentStruggles = recentOf(memories, 'struggle', 14);
 
-  // Evidence — recent proof of transformation
+  // ── Evidence Chain ─────────────────────────────────────────
+  // The transformation arc. OATH shows not just a moment, but the journey:
+  // What you said → What got hard → What you proved → What you became.
+  if (covenant) {
+    const linked = memories
+      .filter((m) => m.linkedPromiseId === covenant.id)
+      .sort((a, b) => a.date - b.date);
+    const chainTypes = new Set(linked.map((m) => m.type));
+
+    if (linked.length >= 2 && chainTypes.size >= 2) {
+      const spanDays = daysAgo(covenant.createdAt);
+      result.push({
+        id: 'manifest_chain',
+        type: 'chain',
+        opening: `You said something ${spanDays} days ago.\nHere is what happened next.`,
+        records: [covenantAsRecord(covenant), ...linked],
+        prompts: [
+          'Connect this to today',
+          'Show me what this means',
+          'Why did you show me this?',
+        ],
+        explanation:
+          'Evidence Chains show your transformation arc — not a single moment, but the full journey from what you said to what you became. I show this when the arc is long enough to matter.',
+      });
+    }
+  }
+
+  // ── Evidence ───────────────────────────────────────────────
   if (evidences.length > 0) {
     const records = (recentEvidence.length > 0 ? recentEvidence : evidences).slice(0, 3);
     result.push({
       id: 'manifest_evidence',
       type: 'evidence',
       opening: covenant
-        ? `You said you wanted to become someone you could be proud of.\nHere's proof you already are.`
-        : "Here's proof of your transformation.",
+        ? `You said you wanted to become someone you could be proud of.\nHere is proof you already are.`
+        : "Here is proof of your transformation.",
       records,
-      prompts: [
-        'Connect this to my promise',
-        'Show me more like this',
-        'Why did you show me this?',
-      ],
+      prompts: ['Connect this to my promise', 'Show me more like this', 'Why did you show me this?'],
       explanation:
         'I surface evidence when you have kept your word without realizing it. These are not coincidences — they are you, becoming.',
     });
   }
 
-  // Confidence — promises backed by evidence
+  // ── Confidence ─────────────────────────────────────────────
   if (promises.length > 0 && breakthroughs.length + evidences.length > 0) {
     const count = breakthroughs.length + evidences.length;
     result.push({
@@ -57,7 +135,7 @@ export function buildManifestations(covenant: Covenant | null, memories: MemoryR
     });
   }
 
-  // Truth — realized insights
+  // ── Truth ──────────────────────────────────────────────────
   if (truths.length > 0) {
     result.push({
       id: 'manifest_truth',
@@ -70,7 +148,7 @@ export function buildManifestations(covenant: Covenant | null, memories: MemoryR
     });
   }
 
-  // Drift — unresolved struggles
+  // ── Drift ──────────────────────────────────────────────────
   if (recentStruggles.length > recentBreakthroughs.length && recentStruggles.length >= 2) {
     result.push({
       id: 'manifest_drift',
@@ -83,7 +161,7 @@ export function buildManifestations(covenant: Covenant | null, memories: MemoryR
     });
   }
 
-  // Memory — most emotionally significant moment
+  // ── Memory ─────────────────────────────────────────────────
   const significant = [...memories]
     .filter((m) => m.emotionalWeight >= 0.8)
     .sort((a, b) => b.emotionalWeight - a.emotionalWeight);
@@ -101,11 +179,9 @@ export function buildManifestations(covenant: Covenant | null, memories: MemoryR
     });
   }
 
-  // Learning — detected pattern
+  // ── Learning ───────────────────────────────────────────────
   const typeCounts: Partial<Record<MemoryRecord['type'], number>> = {};
-  memories.forEach((m) => {
-    typeCounts[m.type] = (typeCounts[m.type] ?? 0) + 1;
-  });
+  memories.forEach((m) => { typeCounts[m.type] = (typeCounts[m.type] ?? 0) + 1; });
   const dominantEntry = (Object.entries(typeCounts) as [MemoryRecord['type'], number][])
     .filter(([t]) => t !== 'promise')
     .sort((a, b) => b[1] - a[1])[0];
@@ -115,7 +191,7 @@ export function buildManifestations(covenant: Covenant | null, memories: MemoryR
       breakthrough: 'You tend to break through when you commit.\nI see it happening again and again.',
       struggle: 'You face the same wall in different forms.\nThat is not weakness — that is a teacher.',
       reflection: 'You reflect often.\nThat frequency is shaping who you are.',
-      evidence: `You keep adding proof.\nThe archive is becoming undeniable.`,
+      evidence: 'You keep adding proof.\nThe archive is becoming undeniable.',
       truth: 'You surface truths consistently.\nYour pattern of realization is a strength.',
     };
     result.push({
@@ -128,7 +204,8 @@ export function buildManifestations(covenant: Covenant | null, memories: MemoryR
     });
   }
 
-  // Future Self — always present as anchor
+  // ── Future Self ────────────────────────────────────────────
+  // Always present as the anchor — the distance already traveled.
   result.push({
     id: 'manifest_future_self',
     type: 'future_self',

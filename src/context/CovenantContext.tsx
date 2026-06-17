@@ -6,7 +6,7 @@ import React, {
   useMemo,
   useState,
 } from 'react';
-import type { Covenant, MemoryRecord, MemoryType } from '@/data/memoryGraph';
+import type { Covenant, ManifestationFeedback, MemoryRecord, MemoryType } from '@/data/memoryGraph';
 import type { RealmKey } from '@/design/realms';
 
 // Lightweight in-memory store with an AsyncStorage-compatible interface.
@@ -19,6 +19,7 @@ const storage = {
 
 const COVENANT_KEY = 'oath:covenant';
 const MEMORIES_KEY = 'oath:memories';
+const FEEDBACK_KEY = 'oath:feedback';
 
 function buildSeedMemories(covenantId: string): MemoryRecord[] {
   const now = Date.now();
@@ -112,6 +113,7 @@ function buildSeedMemories(covenantId: string): MemoryRecord[] {
 interface CovenantContextValue {
   covenant: Covenant | null;
   memories: MemoryRecord[];
+  feedback: ManifestationFeedback[];
   isLoading: boolean;
   createCovenant: (promise: string) => Promise<Covenant>;
   addMemory: (input: {
@@ -124,6 +126,7 @@ interface CovenantContextValue {
     source: MemoryRecord['source'];
     realm?: RealmKey;
   }) => MemoryRecord;
+  addFeedback: (input: Omit<ManifestationFeedback, 'date'>) => void;
 }
 
 const CovenantContext = createContext<CovenantContextValue | null>(null);
@@ -131,17 +134,20 @@ const CovenantContext = createContext<CovenantContextValue | null>(null);
 export function CovenantProvider({ children }: { children: React.ReactNode }) {
   const [covenant, setCovenant] = useState<Covenant | null>(null);
   const [memories, setMemories] = useState<MemoryRecord[]>([]);
+  const [feedback, setFeedback] = useState<ManifestationFeedback[]>([]);
   const [isLoading, setIsLoading] = useState(true);
 
   useEffect(() => {
     async function load() {
       try {
-        const [covenantRaw, memoriesRaw] = await Promise.all([
+        const [covenantRaw, memoriesRaw, feedbackRaw] = await Promise.all([
           storage.getItem(COVENANT_KEY),
           storage.getItem(MEMORIES_KEY),
+          storage.getItem(FEEDBACK_KEY),
         ]);
         if (covenantRaw) setCovenant(JSON.parse(covenantRaw) as Covenant);
         if (memoriesRaw) setMemories(JSON.parse(memoriesRaw) as MemoryRecord[]);
+        if (feedbackRaw) setFeedback(JSON.parse(feedbackRaw) as ManifestationFeedback[]);
       } finally {
         setIsLoading(false);
       }
@@ -194,9 +200,18 @@ export function CovenantProvider({ children }: { children: React.ReactNode }) {
     [],
   );
 
+  const addFeedback = useCallback((input: Omit<ManifestationFeedback, 'date'>) => {
+    const f: ManifestationFeedback = { ...input, date: Date.now() };
+    setFeedback((prev) => {
+      const next = [f, ...prev];
+      storage.setItem(FEEDBACK_KEY, JSON.stringify(next)).catch(() => {});
+      return next;
+    });
+  }, []);
+
   const value = useMemo(
-    () => ({ covenant, memories, isLoading, createCovenant, addMemory }),
-    [covenant, memories, isLoading, createCovenant, addMemory],
+    () => ({ covenant, memories, feedback, isLoading, createCovenant, addMemory, addFeedback }),
+    [covenant, memories, feedback, isLoading, createCovenant, addMemory, addFeedback],
   );
 
   return <CovenantContext.Provider value={value}>{children}</CovenantContext.Provider>;

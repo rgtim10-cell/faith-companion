@@ -17,8 +17,8 @@ import { Atmosphere } from '@/components/layout/Atmosphere';
 import { RealmBackground } from '@/components/layout/RealmBackground';
 import { useCovenant } from '@/context/CovenantContext';
 import { useRealm } from '@/context/RealmContext';
-import { buildManifestations } from '@/engine/manifestation';
-import type { ManifestationType, MemoryRecord } from '@/data/memoryGraph';
+import { buildManifestations, findManifestationOfType } from '@/engine/manifestation';
+import type { FeedbackReaction, ManifestationType, MemoryRecord } from '@/data/memoryGraph';
 import {
   manifestationLabel,
   memoryTypeColor,
@@ -110,6 +110,16 @@ const THEMES: Record<ManifestationType, ManifestationTheme> = {
     voiceLineHeight: 38,
     voiceLetterSpacing: -0.4,
   },
+  chain: {
+    // Evidence Chain — the full arc. Gold. Heavier than truth, quieter than confidence.
+    accent: '#D4A853',
+    glyph: '◇',
+    bloomOpacity: 0.1,
+    voiceFontSize: 26,
+    voiceFontWeight: '300',
+    voiceLineHeight: 37,
+    voiceLetterSpacing: -0.3,
+  },
 };
 
 /**
@@ -120,22 +130,23 @@ const THEMES: Record<ManifestationType, ManifestationTheme> = {
  * is askable. OATH speaks first; you respond or move on.
  */
 export function OathScreen() {
-  const { covenant, memories, addMemory } = useCovenant();
+  const { covenant, memories, feedback, addFeedback, addMemory } = useCovenant();
   const { realm } = useRealm();
   const navigation = useNavigation<NativeStackNavigationProp<RootStackParamList>>();
   const insets = useSafeAreaInsets();
   const { height: H } = useWindowDimensions();
 
   const allManifestations = useMemo(
-    () => buildManifestations(covenant, memories),
+    () => buildManifestations(covenant, memories, feedback),
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [covenant?.id, memories.length],
+    [covenant?.id, memories.length, feedback.length],
   );
 
   const [manifestIdx, setManifestIdx] = useState(0);
   const [activeCardId, setActiveCardId] = useState<string | null>(null);
   const [showExplanation, setShowExplanation] = useState(false);
   const [savedAsEvidence, setSavedAsEvidence] = useState<Set<string>>(new Set());
+  const [feedbackGiven, setFeedbackGiven] = useState<Partial<Record<ManifestationType, FeedbackReaction>>>({});
 
   const current = allManifestations[Math.min(manifestIdx, allManifestations.length - 1)] ?? null;
   const theme = current ? THEMES[current.type] : THEMES.future_self;
@@ -158,6 +169,13 @@ export function OathScreen() {
       bloomAnim.setValue(theme.bloomOpacity);
     }, [theme.bloomOpacity, fadeAnim, bloomAnim, intensity]),
   );
+
+  const handleFeedback = (reaction: FeedbackReaction) => {
+    if (!current) return;
+    addFeedback({ type: current.type, reaction });
+    setFeedbackGiven((prev) => ({ ...prev, [current.type]: reaction }));
+    Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success).catch(() => {});
+  };
 
   const switchTo = (idx: number) => {
     setActiveCardId(null);
@@ -186,17 +204,11 @@ export function OathScreen() {
   };
 
   const handleMotivation = () => {
-    const idx =
-      allManifestations.findIndex((m) => m.type === 'confidence') ??
-      allManifestations.findIndex((m) => m.type === 'evidence');
-    switchTo(idx >= 0 ? idx : 0);
+    switchTo(findManifestationOfType(allManifestations, ['confidence', 'evidence']));
   };
 
   const handleDrift = () => {
-    const idx =
-      allManifestations.findIndex((m) => m.type === 'drift') ??
-      allManifestations.findIndex((m) => m.type === 'truth');
-    switchTo(idx >= 0 ? idx : 0);
+    switchTo(findManifestationOfType(allManifestations, ['drift', 'truth']));
   };
 
   const handleSaveAsEvidence = (record: MemoryRecord) => {
@@ -290,29 +302,43 @@ export function OathScreen() {
         </Animated.View>
 
         <Animated.View style={[styles.body, { opacity: fadeAnim }]}>
-          {/* Supporting records — tappable. Everything here is askable. */}
+          {/* Supporting records — chain gets a timeline; others get expandable cards */}
           {current.records.length > 0 && (
             <View style={styles.records}>
               <View style={[styles.recordsDivider, { backgroundColor: theme.accent + '30' }]} />
-              {current.records.map((record) => (
-                <ExpandableCard
-                  key={record.id}
-                  record={record}
+              {current.type === 'chain' ? (
+                <ChainTimeline
+                  records={current.records}
                   accent={theme.accent}
-                  isActive={activeCardId === record.id}
-                  isSaved={savedAsEvidence.has(record.id)}
-                  onToggle={() => {
-                    setActiveCardId((id) => (id === record.id ? null : record.id));
-                    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light).catch(() => {});
-                  }}
-                  onWhyThis={() => { setShowExplanation((v) => !v); setActiveCardId(null); }}
-                  onConnectCovenant={openCommunion}
-                  onSaveEvidence={() => handleSaveAsEvidence(record)}
-                  onDisagree={openCommunion}
                 />
-              ))}
+              ) : (
+                current.records.map((record) => (
+                  <ExpandableCard
+                    key={record.id}
+                    record={record}
+                    accent={theme.accent}
+                    isActive={activeCardId === record.id}
+                    isSaved={savedAsEvidence.has(record.id)}
+                    onToggle={() => {
+                      setActiveCardId((id) => (id === record.id ? null : record.id));
+                      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light).catch(() => {});
+                    }}
+                    onWhyThis={() => { setShowExplanation((v) => !v); setActiveCardId(null); }}
+                    onConnectCovenant={openCommunion}
+                    onSaveEvidence={() => handleSaveAsEvidence(record)}
+                    onDisagree={openCommunion}
+                  />
+                ))
+              )}
             </View>
           )}
+
+          {/* Why This Matters — connects this manifestation to the covenant */}
+          <WhyThisMatters
+            type={current.type}
+            promise={covenant?.promise ?? null}
+            accent={theme.accent}
+          />
 
           {/* Why OATH showed this — expands inline */}
           {showExplanation && (
@@ -346,6 +372,13 @@ export function OathScreen() {
             ))}
           </View>
 
+          {/* Feedback — teaches OATH what resonates */}
+          <FeedbackRow
+            given={feedbackGiven[current.type] ?? null}
+            accent={theme.accent}
+            onReact={handleFeedback}
+          />
+
           {/* Triggers — summoning OATH's perspective */}
           <View style={styles.triggers}>
             <View style={[styles.triggerDivider, { backgroundColor: 'rgba(255,255,255,0.06)' }]} />
@@ -360,6 +393,204 @@ export function OathScreen() {
 }
 
 // ── Sub-components ────────────────────────────────────────────
+
+// Evidence Chain timeline — vertical arc from promise to latest evidence.
+function ChainTimeline({ records, accent }: { records: MemoryRecord[]; accent: string }) {
+  return (
+    <View style={chainStyles.container}>
+      {records.map((record, i) => {
+        const isLast = i === records.length - 1;
+        const typeColor = memoryTypeColor[record.type];
+        const glyph = memoryTypeGlyph[record.type];
+        const daysAgo = Math.round((Date.now() - record.date) / (24 * 60 * 60 * 1000));
+
+        return (
+          <View key={record.id} style={chainStyles.node}>
+            {/* Vertical connector line */}
+            {!isLast && (
+              <View style={[chainStyles.line, { backgroundColor: accent + '28' }]} />
+            )}
+            {/* Glyph node */}
+            <View style={[chainStyles.glyphCircle, { borderColor: typeColor + '55', backgroundColor: typeColor + '10' }]}>
+              <Text style={[chainStyles.glyphText, { color: typeColor }]}>{glyph}</Text>
+            </View>
+            {/* Content */}
+            <View style={chainStyles.nodeContent}>
+              <View style={chainStyles.nodeHeader}>
+                <Text style={[chainStyles.nodeType, { color: typeColor }]}>
+                  {memoryTypeLabel[record.type].toUpperCase()}
+                </Text>
+                <Text style={chainStyles.nodeDate}>
+                  {daysAgo === 0 ? 'Today' : daysAgo === 1 ? 'Yesterday' : `${daysAgo}d ago`}
+                </Text>
+              </View>
+              <Text style={chainStyles.nodeContent2} numberOfLines={3}>
+                {record.content}
+              </Text>
+              {/* Memory resonance indicator — shows when a record links to the covenant */}
+              {record.tags?.includes('covenant') || record.linkedPromiseId ? (
+                <View style={chainStyles.resonanceRow}>
+                  <View style={[chainStyles.resonanceDot, { backgroundColor: accent }]} />
+                  <Text style={[chainStyles.resonanceLabel, { color: accent }]}>
+                    Resonates with your covenant
+                  </Text>
+                </View>
+              ) : null}
+            </View>
+          </View>
+        );
+      })}
+    </View>
+  );
+}
+
+const chainStyles = StyleSheet.create({
+  container: { gap: 0 },
+  node: {
+    flexDirection: 'row',
+    gap: 12,
+    paddingBottom: 16,
+    position: 'relative',
+  },
+  line: {
+    position: 'absolute',
+    left: 15,
+    top: 28,
+    width: 1,
+    bottom: 0,
+  },
+  glyphCircle: {
+    width: 30,
+    height: 30,
+    borderRadius: 15,
+    borderWidth: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+    flexShrink: 0,
+    marginTop: 2,
+  },
+  glyphText: { fontSize: 13 },
+  nodeContent: { flex: 1, gap: 4 },
+  nodeHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
+  nodeType: { fontSize: 10, fontWeight: '600', letterSpacing: 1.4 },
+  nodeDate: { fontSize: 11, color: 'rgba(255,255,255,0.28)' },
+  nodeContent2: { fontSize: 14, color: 'rgba(255,255,255,0.65)', lineHeight: 20, letterSpacing: -0.1 },
+  resonanceRow: { flexDirection: 'row', alignItems: 'center', gap: 5, marginTop: 4 },
+  resonanceDot: { width: 5, height: 5, borderRadius: 3 },
+  resonanceLabel: { fontSize: 11, fontWeight: '500', letterSpacing: 0.2, opacity: 0.8 },
+});
+
+// Why This Matters — connects the manifestation to the user's covenant.
+// Not a technical explanation (that's "Why OATH showed you this") —
+// this is the emotional significance of what OATH is surfacing.
+const WHY_THIS_MATTERS: Partial<Record<ManifestationType, (promise: string | null) => string>> = {
+  chain: (p) =>
+    p
+      ? `This arc was built by you — through struggle, proof, and clarity. It is the lived shape of "${p.slice(0, 60)}${p.length > 60 ? '...' : ''}"`
+      : 'This arc is the lived shape of your transformation. Not a summary — a record of the real thing.',
+  evidence: () =>
+    'Evidence is not about feeling good. It is about knowing what is true. What you have done cannot be undone.',
+  confidence: () =>
+    'Confidence built from your own record is different from motivation. It does not require a feeling. It only requires a look at what you have already done.',
+  drift: () =>
+    'Naming drift is not defeat. It is the first act of return. OATH shows this because you asked for truth, not comfort.',
+  truth: () =>
+    'Realizations do not expire. This one is still shaping decisions — you may not notice it, but OATH does.',
+  memory: () =>
+    'Some things are worth keeping exactly as they were. Not revised. Not improved. Just held.',
+  learning: () =>
+    'Patterns only become visible with enough data. You have generated enough. What you do next with this is up to you.',
+  future_self: (p) =>
+    p
+      ? `The version of you who said "${p.slice(0, 50)}${p.length > 50 ? '...' : ''}" — you are already that person. The gap is smaller than you think.`
+      : 'You are already further than where you started. The version of you who began this journey would recognize what you have become.',
+};
+
+function WhyThisMatters({
+  type,
+  promise,
+  accent,
+}: {
+  type: ManifestationType;
+  promise: string | null;
+  accent: string;
+}) {
+  const text = WHY_THIS_MATTERS[type]?.(promise);
+  if (!text) return null;
+
+  return (
+    <View style={[wtmStyles.container, { borderLeftColor: accent + '50' }]}>
+      <Text style={[wtmStyles.label, { color: accent }]}>WHY THIS MATTERS</Text>
+      <Text style={wtmStyles.text}>{text}</Text>
+    </View>
+  );
+}
+
+const wtmStyles = StyleSheet.create({
+  container: {
+    borderLeftWidth: 2,
+    paddingLeft: 14,
+    gap: 6,
+  },
+  label: { fontSize: 10, fontWeight: '600', letterSpacing: 1.8 },
+  text: { fontSize: 14, color: 'rgba(255,255,255,0.55)', lineHeight: 21, letterSpacing: -0.1 },
+});
+
+// Feedback row — teaches OATH what resonates.
+const FEEDBACK_LABELS: Record<FeedbackReaction, string> = {
+  resonated: 'That resonated',
+  not_relevant: 'Not relevant',
+  more: 'Tell me more',
+  disagree: 'I disagree',
+};
+
+function FeedbackRow({
+  given,
+  accent,
+  onReact,
+}: {
+  given: FeedbackReaction | null;
+  accent: string;
+  onReact: (r: FeedbackReaction) => void;
+}) {
+  return (
+    <View style={fbStyles.container}>
+      <Text style={fbStyles.label}>
+        {given ? '◆ OATH will remember that' : 'Did this resonate?'}
+      </Text>
+      {!given && (
+        <View style={fbStyles.pills}>
+          {(Object.keys(FEEDBACK_LABELS) as FeedbackReaction[]).map((r) => (
+            <TouchableOpacity
+              key={r}
+              onPress={() => onReact(r)}
+              style={[
+                fbStyles.pill,
+                { borderColor: accent + '35', backgroundColor: accent + '09' },
+              ]}
+              activeOpacity={0.7}
+            >
+              <Text style={[fbStyles.pillText, { color: accent }]}>{FEEDBACK_LABELS[r]}</Text>
+            </TouchableOpacity>
+          ))}
+        </View>
+      )}
+    </View>
+  );
+}
+
+const fbStyles = StyleSheet.create({
+  container: { gap: 10 },
+  label: { fontSize: 11, color: 'rgba(255,255,255,0.28)', letterSpacing: 0.4 },
+  pills: { flexDirection: 'row', flexWrap: 'wrap', gap: 7 },
+  pill: {
+    paddingVertical: 6,
+    paddingHorizontal: 11,
+    borderRadius: 99,
+    borderWidth: 1,
+  },
+  pillText: { fontSize: 12, fontWeight: '500', letterSpacing: 0.1 },
+});
 
 function ExpandableCard({
   record,
@@ -405,6 +636,14 @@ function ExpandableCard({
       <Text style={styles.cardContent} numberOfLines={isActive ? undefined : 2}>
         {record.content}
       </Text>
+
+      {/* Memory Resonance — surfaces when this memory connects to the covenant */}
+      {record.linkedPromiseId && !isActive && (
+        <View style={styles.resonanceRow}>
+          <View style={[styles.resonanceDot, { backgroundColor: accent }]} />
+          <Text style={[styles.resonanceText, { color: accent }]}>Resonates with your covenant</Text>
+        </View>
+      )}
 
       {isActive && (
         <View style={styles.cardActions}>
@@ -587,6 +826,14 @@ const styles = StyleSheet.create({
     alignSelf: 'center',
     paddingHorizontal: 4,
   },
+  resonanceRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 5,
+    marginTop: 4,
+  },
+  resonanceDot: { width: 4, height: 4, borderRadius: 2 },
+  resonanceText: { fontSize: 11, fontWeight: '500', letterSpacing: 0.2, opacity: 0.75 },
 
   // Explanation
   explanation: {
