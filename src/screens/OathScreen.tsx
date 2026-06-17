@@ -1,71 +1,104 @@
-import React from 'react';
-import { StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import React, { useEffect, useRef, useState } from 'react';
+import { Animated, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { RealmBackground } from '@/components/layout/RealmBackground';
-import { AIInsight } from '@/components/ui/AIInsight';
-import { GlassCard } from '@/components/ui/GlassCard';
-import { MemoryCard } from '@/components/ui/MemoryCard';
 import { OathOrb } from '@/components/ui/OathOrb';
-import { aiInsights, userProfile, vaultMemories } from '@/data/mock';
 import { useRealm } from '@/context/RealmContext';
 import { colors, radius, spacing, typography } from '@/design/tokens';
 import type { RealmKey } from '@/types';
 
 const REALM_ORDER: RealmKey[] = ['presence', 'future_self', 'mission_control', 'alignment'];
 
+const quickActions = [
+  { id: 'talk', label: 'Talk to me' },
+  { id: 'analyze', label: 'Analyze my day' },
+  { id: 'advice', label: 'Give me advice' },
+  { id: 'challenge', label: 'Challenge me' },
+];
+
 export function OathScreen() {
   const { realm, realmKey, setRealm } = useRealm();
   const insets = useSafeAreaInsets();
-  const topMemory = vaultMemories[0];
+  const [activeAction, setActiveAction] = useState<string | null>(null);
+
+  const textOpacity = useRef(new Animated.Value(0)).current;
+  const textTranslate = useRef(new Animated.Value(12)).current;
+
+  useEffect(() => {
+    textOpacity.setValue(0);
+    textTranslate.setValue(12);
+    Animated.parallel([
+      Animated.timing(textOpacity, { toValue: 1, duration: 700, delay: 200, useNativeDriver: true }),
+      Animated.timing(textTranslate, { toValue: 0, duration: 700, delay: 200, useNativeDriver: true }),
+    ]).start();
+  }, [realmKey, textOpacity, textTranslate]);
 
   return (
     <View style={styles.container}>
       <RealmBackground />
 
-      <View
-        style={[
-          styles.scroll,
-          { paddingTop: insets.top + spacing.lg, paddingBottom: insets.bottom + 110 },
-        ]}
-      >
-        {/* Realm indicator + switcher */}
-        <View style={styles.realmRow}>
-          <View style={[styles.realmIndicator, { borderColor: realm.accent + '44', backgroundColor: realm.accentMuted }]}>
-            <Text style={[styles.realmName, { color: realm.accentSoft }]}>
-              {realm.name.toUpperCase()} REALM
+      <View style={[styles.content, { paddingTop: insets.top + spacing.lg, paddingBottom: insets.bottom + 110 }]}>
+
+        {/* Realm indicator */}
+        <View style={styles.header}>
+          <Text style={[styles.appName, { color: realm.accentSoft }]}>OATH</Text>
+          <TouchableOpacity style={[styles.realmPill, { borderColor: realm.accent + '44', backgroundColor: realm.accentMuted }]}>
+            <View style={[styles.realmDotSmall, { backgroundColor: realm.accent }]} />
+            <Text style={[styles.realmPillText, { color: realm.accentSoft }]}>
+              {realm.name} Realm
             </Text>
-          </View>
+            <Text style={[styles.realmChevron, { color: realm.accentSoft }]}>↓</Text>
+          </TouchableOpacity>
         </View>
 
-        {/* Orb — the living center */}
+        {/* The Living Presence — orb dominates */}
         <View style={styles.orbSection}>
           <OathOrb size="xl" />
-          <View style={styles.orbText}>
-            <Text style={[styles.presenceLabel, { color: realm.accentSoft }]}>
-              {realm.insightPrefix.toUpperCase()}
+
+          <Animated.View style={[styles.orbTextBlock, { opacity: textOpacity, transform: [{ translateY: textTranslate }] }]}>
+            <Text style={[styles.listeningText, { color: realm.accentSoft }]}>
+              {realm.listeningVoice}
             </Text>
-            <Text style={styles.feelingText}>{realm.feeling}</Text>
-          </View>
+            <Text style={styles.presenceStatement}>
+              {realm.presenceStatement}
+            </Text>
+          </Animated.View>
         </View>
 
-        {/* OATH Insight */}
-        <AIInsight text={aiInsights.Oath.text} style={styles.insight} />
+        {/* OATH asks — the invitation */}
+        <View style={styles.questionBlock}>
+          <Text style={[styles.questionText, { color: colors.textSecondary }]}>
+            How can I support you right now?
+          </Text>
+        </View>
 
-        {/* Today's Oath */}
-        <GlassCard padding="lg" style={styles.oathCard}>
-          <Text style={[styles.oathLabel, { color: realm.accentSoft }]}>YOUR OATH</Text>
-          <Text style={styles.oathText}>"{userProfile.oath}"</Text>
-          <View style={[styles.divider, { backgroundColor: realm.accent + '22' }]} />
-          <Text style={styles.archetype}>{userProfile.archetype}</Text>
-          <Text style={styles.tagline}>"{userProfile.tagline}"</Text>
-        </GlassCard>
-
-        {/* Memory — emotional core */}
-        <MemoryCard memory={topMemory} style={styles.memory} />
+        {/* Quick interactions — 2×2 grid */}
+        <View style={styles.actionsGrid}>
+          {quickActions.map((action) => {
+            const isActive = activeAction === action.id;
+            return (
+              <TouchableOpacity
+                key={action.id}
+                onPress={() => setActiveAction(isActive ? null : action.id)}
+                activeOpacity={0.75}
+                style={[
+                  styles.actionCard,
+                  isActive
+                    ? { backgroundColor: realm.accentMuted, borderColor: realm.accent + '66' }
+                    : { backgroundColor: 'rgba(255,255,255,0.04)', borderColor: 'rgba(255,255,255,0.08)' },
+                ]}
+              >
+                <Text style={[styles.actionLabel, { color: isActive ? realm.accentSoft : colors.text }]}>
+                  {action.label}
+                </Text>
+              </TouchableOpacity>
+            );
+          })}
+        </View>
 
         {/* Realm switcher */}
         <View style={styles.realmSwitcher}>
-          <Text style={styles.realmSwitchLabel}>SWITCH REALM</Text>
+          <Text style={[styles.realmSwitchLabel, { color: colors.textSubtle }]}>SWITCH REALM</Text>
           <View style={styles.realmDots}>
             {REALM_ORDER.map((key) => {
               const isActive = key === realmKey;
@@ -85,14 +118,10 @@ export function OathScreen() {
               );
             })}
           </View>
+          <Text style={[styles.realmContext, { color: colors.textSubtle }]}>
+            {realm.contextStatement}
+          </Text>
         </View>
-
-        {/* Speak to OATH — placeholder for future AI */}
-        <TouchableOpacity style={[styles.speakButton, { borderColor: realm.accent + '55', backgroundColor: realm.accentMuted }]}>
-          <View style={[styles.speakDot, { backgroundColor: realm.accent }]} />
-          <Text style={[styles.speakText, { color: realm.accentSoft }]}>Speak to OATH</Text>
-          <Text style={styles.speakSub}>Coming soon</Text>
-        </TouchableOpacity>
       </View>
     </View>
   );
@@ -102,82 +131,97 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
   },
-  scroll: {
+  content: {
     flex: 1,
     paddingHorizontal: spacing.lg,
   },
-  realmRow: {
+  header: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
     alignItems: 'center',
     marginBottom: spacing.xl,
   },
-  realmIndicator: {
-    paddingHorizontal: 14,
+  appName: {
+    ...typography.labelLg,
+    fontSize: 13,
+    letterSpacing: 3,
+  },
+  realmPill: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    paddingHorizontal: 12,
     paddingVertical: 6,
     borderRadius: radius.full,
     borderWidth: 1,
   },
-  realmName: {
-    ...typography.labelSm,
-    letterSpacing: 2,
+  realmDotSmall: {
+    width: 5,
+    height: 5,
+    borderRadius: 3,
+  },
+  realmPillText: {
+    ...typography.labelMd,
+  },
+  realmChevron: {
+    fontSize: 11,
   },
   orbSection: {
     alignItems: 'center',
-    marginBottom: spacing.xl,
     gap: spacing.lg,
+    marginBottom: spacing.lg,
   },
-  orbText: {
+  orbTextBlock: {
     alignItems: 'center',
-    gap: spacing.xs,
-  },
-  presenceLabel: {
-    ...typography.labelLg,
-    letterSpacing: 2,
-  },
-  feelingText: {
-    ...typography.bodyMd,
-    color: colors.textSecondary,
-    textAlign: 'center',
-    fontStyle: 'italic',
-  },
-  insight: {
-    marginBottom: spacing.lg,
-  },
-  oathCard: {
-    marginBottom: spacing.lg,
     gap: spacing.sm,
   },
-  oathLabel: {
-    ...typography.labelMd,
-  },
-  oathText: {
-    ...typography.oath,
-    color: colors.text,
-  },
-  divider: {
-    height: 1,
-    marginVertical: spacing.xs,
-  },
-  archetype: {
+  listeningText: {
     ...typography.labelLg,
-    color: colors.textSubtle,
+    letterSpacing: 3,
   },
-  tagline: {
-    ...typography.bodySm,
-    color: colors.textSecondary,
-    fontStyle: 'italic',
+  presenceStatement: {
+    ...typography.headingMd,
+    color: colors.text,
+    textAlign: 'center',
+    lineHeight: 30,
+    fontWeight: '300',
   },
-  memory: {
+  questionBlock: {
+    alignItems: 'center',
+    marginBottom: spacing.lg,
+  },
+  questionText: {
+    ...typography.bodyLg,
+    textAlign: 'center',
+  },
+  actionsGrid: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: spacing.sm,
     marginBottom: spacing.xl,
+  },
+  actionCard: {
+    width: '47.5%',
+    borderRadius: radius.lg,
+    borderWidth: 1,
+    paddingVertical: spacing.md,
+    paddingHorizontal: spacing.md,
+    alignItems: 'center',
+    justifyContent: 'center',
+    minHeight: 52,
+  },
+  actionLabel: {
+    ...typography.bodyMd,
+    fontWeight: '500',
+    textAlign: 'center',
   },
   realmSwitcher: {
     alignItems: 'center',
     gap: spacing.sm,
-    marginBottom: spacing.xl,
   },
   realmSwitchLabel: {
     ...typography.labelSm,
-    color: colors.textSubtle,
-    letterSpacing: 1.5,
+    letterSpacing: 1.8,
   },
   realmDots: {
     flexDirection: 'row',
@@ -189,27 +233,12 @@ const styles = StyleSheet.create({
     borderRadius: radius.full,
     borderWidth: 1,
   },
-  speakButton: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: spacing.sm,
-    borderRadius: radius.xl,
-    borderWidth: 1,
-    paddingHorizontal: spacing.lg,
-    paddingVertical: spacing.md,
-  },
-  speakDot: {
-    width: 8,
-    height: 8,
-    borderRadius: 4,
-  },
-  speakText: {
-    ...typography.bodyMd,
-    fontWeight: '500',
-    flex: 1,
-  },
-  speakSub: {
-    ...typography.labelMd,
-    color: colors.textSubtle,
+  realmContext: {
+    ...typography.bodySm,
+    textAlign: 'center',
+    fontStyle: 'italic',
+    lineHeight: 19,
+    paddingHorizontal: spacing.xl,
+    marginTop: spacing.xs,
   },
 });

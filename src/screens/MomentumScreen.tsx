@@ -1,11 +1,8 @@
 import React from 'react';
 import { StyleSheet, Text, View } from 'react-native';
 import { ScreenWrapper } from '@/components/layout/ScreenWrapper';
-import { AIInsight } from '@/components/ui/AIInsight';
 import { GlassCard } from '@/components/ui/GlassCard';
 import { ProgressArc } from '@/components/ui/ProgressArc';
-import { SectionHeader } from '@/components/ui/SectionHeader';
-import { StatCard } from '@/components/ui/StatCard';
 import {
   aiInsights,
   momentumStats,
@@ -24,85 +21,90 @@ export function MomentumScreen() {
 
   return (
     <ScreenWrapper>
-      <SectionHeader
-        title="Momentum"
-        eyebrow={`${userProfile.streak}-day streak`}
-        eyebrowColor={realm.accentSoft}
-        style={styles.header}
-      />
-
-      {/* OATH is alive — pattern insight */}
-      <AIInsight text={aiInsights.Momentum.text} style={styles.insight} />
-
-      {/* Overall score + week chart */}
-      <GlassCard padding="lg" style={styles.mainCard}>
-        <View style={styles.mainRow}>
-          <View style={styles.arcWrapper}>
-            <ProgressArc value={overallMomentum} size={150} strokeWidth={12} label="overall" />
-          </View>
-          <View style={styles.chartWrapper}>
-            <Text style={[styles.chartLabel, { color: realm.accentSoft }]}>THIS WEEK</Text>
-            <View style={styles.bars}>
-              {weeklyMomentum.map((val, i) => {
-                const isToday = i === weeklyMomentum.length - 1;
-                const barHeight = (val / maxBar) * 72;
-                return (
-                  <View key={i} style={styles.barCol}>
-                    <View style={styles.barTrack}>
-                      <View
-                        style={[
-                          styles.barFill,
-                          {
-                            height: barHeight,
-                            backgroundColor: isToday ? realm.accent : realm.accentMuted,
-                            borderRadius: radius.sm,
-                          },
-                        ]}
-                      />
-                    </View>
-                    <Text
-                      style={[
-                        styles.dayLabel,
-                        { color: isToday ? realm.accentSoft : colors.textSubtle },
-                      ]}
-                    >
-                      {weekDayLabels[i]}
-                    </Text>
-                  </View>
-                );
-              })}
-            </View>
+      {/* OATH frames momentum — not a dashboard title */}
+      <View style={styles.header}>
+        <View>
+          <Text style={[styles.streakLabel, { color: realm.accentSoft }]}>
+            {userProfile.streak}-DAY STREAK
+          </Text>
+          <Text style={styles.screenTitle}>Momentum</Text>
+        </View>
+        {/* THIS WEEK mini chart */}
+        <View style={styles.miniChartBlock}>
+          <Text style={[styles.miniChartLabel, { color: realm.accentSoft }]}>THIS WEEK</Text>
+          <View style={styles.miniBars}>
+            {weeklyMomentum.map((val, i) => {
+              const isToday = i === weeklyMomentum.length - 1;
+              const h = Math.max(4, (val / maxBar) * 32);
+              return (
+                <View key={i} style={styles.miniBarCol}>
+                  <View style={[styles.miniBar, {
+                    height: h,
+                    backgroundColor: isToday ? realm.accent : realm.accentMuted,
+                    borderRadius: 2,
+                  }]} />
+                  <Text style={[styles.miniDay, { color: isToday ? realm.accentSoft : colors.textSubtle }]}>
+                    {weekDayLabels[i]}
+                  </Text>
+                </View>
+              );
+            })}
           </View>
         </View>
-
-        <View style={[styles.divider, { backgroundColor: colors.border }]} />
-        <Text style={styles.momentum90}>
-          Highest sustained momentum in the last 90 days.
-        </Text>
-      </GlassCard>
-
-      {/* Stat breakdown grid */}
-      <SectionHeader
-        title="Breakdown"
-        subtitle="The signals behind your score"
-        style={styles.sectionHeader}
-      />
-
-      <View style={styles.statsGrid}>
-        {momentumStats.map((stat) => (
-          <StatCard key={stat.id} stat={stat} style={styles.statCard} />
-        ))}
       </View>
 
-      {/* OATH pattern note */}
-      <GlassCard padding="md" style={styles.patternCard}>
-        <View style={[styles.patternDot, { backgroundColor: realm.accent }]} />
-        <View style={styles.patternText}>
-          <Text style={[styles.patternTitle, { color: realm.accentSoft }]}>OATH noticed a pattern</Text>
-          <Text style={styles.patternBody}>
-            Your top 3 momentum weeks all started with completing the morning mission before 7 AM. Today, you started at 6:42.
-          </Text>
+      {/* Overall score — OATH's primary read */}
+      <GlassCard padding="lg" style={styles.scoreCard}>
+        <View style={styles.scoreRow}>
+          <ProgressArc value={overallMomentum} size={140} strokeWidth={12} label="Overall" />
+          <View style={styles.scoreMeta}>
+            <Text style={[styles.momentumWord, { color: realm.accentSoft }]}>Momentum</Text>
+            <Text style={styles.momentumLevel}>High</Text>
+            <Text style={[styles.oathRead, { color: colors.textSubtle }]}>
+              Highest sustained{'\n'}momentum in 90 days.
+            </Text>
+          </View>
         </View>
+      </GlassCard>
+
+      {/* OATH narrates the breakdown */}
+      <View style={styles.breakdownHeader}>
+        <Text style={[styles.breakdownEyebrow, { color: realm.accentSoft }]}>THIS IS WHAT I'M SEEING</Text>
+        <Text style={styles.breakdownTitle}>Breakdown</Text>
+      </View>
+
+      <View style={styles.statsGrid}>
+        {momentumStats.map((stat) => {
+          const isPositive = stat.trend >= 0;
+          return (
+            <GlassCard key={stat.id} padding="md" style={styles.statCard}>
+              <Text style={[styles.statValue, { color: colors.text }]}>{stat.value}%</Text>
+              <Text style={[styles.statLabel, { color: colors.textSecondary }]}>{stat.label}</Text>
+              <View style={styles.trendRow}>
+                <Text style={[styles.trendText, { color: isPositive ? realm.accent : colors.error }]}>
+                  {isPositive ? '↑' : '↓'} {Math.abs(stat.trend)}%
+                </Text>
+              </View>
+              <View style={[styles.statBar, { backgroundColor: colors.border }]}>
+                <View style={[styles.statBarFill, {
+                  width: `${stat.value}%` as `${number}%`,
+                  backgroundColor: realm.accentMuted,
+                  borderRightWidth: 2,
+                  borderRightColor: realm.accent,
+                }]} />
+              </View>
+            </GlassCard>
+          );
+        })}
+      </View>
+
+      {/* OATH INSIGHT — OATH speaks last, most personal */}
+      <GlassCard padding="lg" style={[styles.insightCard, { borderColor: realm.accent + '33' }]}>
+        <View style={styles.insightHeader}>
+          <View style={[styles.insightDot, { backgroundColor: realm.accent }]} />
+          <Text style={[styles.insightLabel, { color: realm.accent }]}>OATH INSIGHT</Text>
+        </View>
+        <Text style={styles.insightText}>{aiInsights.Momentum.text}</Text>
       </GlassCard>
     </ScreenWrapper>
   );
@@ -110,65 +112,86 @@ export function MomentumScreen() {
 
 const styles = StyleSheet.create({
   header: {
-    marginBottom: spacing.lg,
-  },
-  insight: {
-    marginBottom: spacing.lg,
-  },
-  mainCard: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'flex-start',
     marginBottom: spacing.xl,
-    gap: spacing.md,
   },
-  mainRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: spacing.lg,
-  },
-  arcWrapper: {
-    alignItems: 'center',
-  },
-  chartWrapper: {
-    flex: 1,
-    gap: spacing.sm,
-  },
-  chartLabel: {
+  streakLabel: {
     ...typography.labelMd,
+    letterSpacing: 1.5,
+    marginBottom: 2,
   },
-  bars: {
-    flexDirection: 'row',
+  screenTitle: {
+    ...typography.displayMd,
+    color: colors.text,
+    letterSpacing: -1,
+  },
+  miniChartBlock: {
     alignItems: 'flex-end',
-    gap: 5,
-    height: 88,
-  },
-  barCol: {
-    flex: 1,
-    alignItems: 'center',
     gap: 4,
   },
-  barTrack: {
-    flex: 1,
-    width: '100%',
+  miniChartLabel: {
+    ...typography.labelSm,
+    letterSpacing: 1.2,
+  },
+  miniBars: {
+    flexDirection: 'row',
+    alignItems: 'flex-end',
+    gap: 3,
+    height: 40,
+  },
+  miniBarCol: {
+    alignItems: 'center',
+    gap: 2,
     justifyContent: 'flex-end',
   },
-  barFill: {
-    width: '100%',
+  miniBar: {
+    width: 8,
     minHeight: 4,
   },
-  dayLabel: {
+  miniDay: {
     ...typography.labelSm,
-    fontSize: 9,
+    fontSize: 8,
   },
-  divider: {
-    height: StyleSheet.hairlineWidth,
+  scoreCard: {
+    marginBottom: spacing.xl,
   },
-  momentum90: {
+  scoreRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.xl,
+  },
+  scoreMeta: {
+    flex: 1,
+    gap: spacing.xs,
+  },
+  momentumWord: {
+    ...typography.labelLg,
+    letterSpacing: 1.5,
+  },
+  momentumLevel: {
+    ...typography.displayMd,
+    color: colors.text,
+    letterSpacing: -1,
+  },
+  oathRead: {
     ...typography.bodySm,
-    color: colors.textSubtle,
-    textAlign: 'center',
+    lineHeight: 18,
     fontStyle: 'italic',
+    marginTop: spacing.xs,
   },
-  sectionHeader: {
+  breakdownHeader: {
     marginBottom: spacing.md,
+  },
+  breakdownEyebrow: {
+    ...typography.labelSm,
+    letterSpacing: 1.8,
+    marginBottom: 3,
+  },
+  breakdownTitle: {
+    ...typography.headingMd,
+    color: colors.text,
   },
   statsGrid: {
     flexDirection: 'row',
@@ -178,29 +201,55 @@ const styles = StyleSheet.create({
   },
   statCard: {
     width: '47.5%',
+    gap: 4,
   },
-  patternCard: {
-    flexDirection: 'row',
-    gap: spacing.md,
-    alignItems: 'flex-start',
+  statValue: {
+    fontSize: 28,
+    fontWeight: '700',
+    letterSpacing: -1.5,
+    lineHeight: 32,
   },
-  patternDot: {
-    width: 8,
-    height: 8,
-    borderRadius: 4,
-    marginTop: 6,
-    flexShrink: 0,
-  },
-  patternText: {
-    flex: 1,
-    gap: spacing.xs,
-  },
-  patternTitle: {
-    ...typography.labelLg,
-  },
-  patternBody: {
+  statLabel: {
     ...typography.bodySm,
-    color: colors.textSecondary,
-    lineHeight: 19,
+  },
+  trendRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  trendText: {
+    ...typography.labelMd,
+    fontWeight: '600',
+  },
+  statBar: {
+    height: 2,
+    borderRadius: 1,
+    marginTop: 4,
+    overflow: 'hidden',
+  },
+  statBarFill: {
+    height: '100%',
+  },
+  insightCard: {
+    gap: spacing.sm,
+    borderWidth: 1,
+  },
+  insightHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+  },
+  insightDot: {
+    width: 6,
+    height: 6,
+    borderRadius: 3,
+  },
+  insightLabel: {
+    ...typography.labelMd,
+    letterSpacing: 1.5,
+  },
+  insightText: {
+    ...typography.bodyMd,
+    color: colors.text,
+    lineHeight: 22,
   },
 });

@@ -13,6 +13,11 @@ export interface RealmConfig {
   orbColors: [string, string, string, string];
   aiTone: string;
   insightPrefix: string;
+  // OATH's voice per realm
+  morningStatement: string;
+  listeningVoice: string;
+  presenceStatement: string;
+  contextStatement: string;
 }
 
 export const realms: Record<RealmKey, RealmConfig> = {
@@ -26,10 +31,13 @@ export const realms: Record<RealmKey, RealmConfig> = {
     accentSoft: '#7CA8FF',
     accentMuted: 'rgba(77,140,255,0.12)',
     gradientColors: ['rgba(77,140,255,0.22)', 'rgba(77,140,255,0.07)', 'rgba(3,4,8,0)'],
-    // Dark void center → deep dark → mid blue → edge bright
     orbColors: ['#010308', '#04112A', '#163272', '#4D8CFF'],
     aiTone: 'Warm. Direct. Knowing.',
     insightPrefix: 'OATH senses',
+    morningStatement: "I've been watching. You're building something real.",
+    listeningVoice: 'Listening.',
+    presenceStatement: "I'm not just here to help.\nI'm here with you.\nAlways.",
+    contextStatement: 'I notice things. Patterns. Shifts. What matters most.',
   },
   future_self: {
     key: 'future_self',
@@ -44,6 +52,10 @@ export const realms: Record<RealmKey, RealmConfig> = {
     orbColors: ['#030114', '#0D052E', '#3B157A', '#8B5CF6'],
     aiTone: 'Visionary. Expansive. Future-focused.',
     insightPrefix: 'OATH sees',
+    morningStatement: "You're becoming the person you once dreamed of.",
+    listeningVoice: 'Growing.',
+    presenceStatement: "Every decision today\nis a vote for\nwho you're becoming.",
+    contextStatement: 'I see your trajectory. You are further along than you think.',
   },
   mission_control: {
     key: 'mission_control',
@@ -58,6 +70,10 @@ export const realms: Record<RealmKey, RealmConfig> = {
     orbColors: ['#000810', '#031828', '#074E7A', '#38BDF8'],
     aiTone: 'Precise. Tactical. Execution-focused.',
     insightPrefix: 'OATH calculates',
+    morningStatement: 'Systems optimal. You are operating at your highest level.',
+    listeningVoice: 'Analyzing.',
+    presenceStatement: "Systems online.\nFocus at its peak.\nLet's execute.",
+    contextStatement: "I calculate what's working. I identify what's not.",
   },
   alignment: {
     key: 'alignment',
@@ -72,6 +88,10 @@ export const realms: Record<RealmKey, RealmConfig> = {
     orbColors: ['#000C09', '#011F17', '#054840', '#2DD4BF'],
     aiTone: 'Reflective. Grounding. Essential.',
     insightPrefix: 'OATH reflects',
+    morningStatement: 'Take a breath. Let me help you focus on what actually matters.',
+    listeningVoice: 'Sensing.',
+    presenceStatement: "Clarity over chaos.\nPresence over pressure.\nI'm here.",
+    contextStatement: 'I help you find what is signal and what is noise.',
   },
 };
 
