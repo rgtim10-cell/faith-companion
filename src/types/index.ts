@@ -63,8 +63,8 @@ export type RootStackParamList = {
 
 export type TabParamList = {
   Today: undefined;
-  Missions: undefined;
+  Evidence: undefined;
   Oath: undefined;
-  Momentum: undefined;
+  Memory: undefined;
   Vault: undefined;
 };

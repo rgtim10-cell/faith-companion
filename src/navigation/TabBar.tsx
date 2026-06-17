@@ -10,17 +10,17 @@ import { useRealm } from '@/context/RealmContext';
 
 const TAB_ICONS: Record<string, string> = {
   Today: '◎',
-  Missions: '◈',
+  Evidence: '◆',
   Oath: '',
-  Momentum: '◉',
-  Vault: '◆',
+  Memory: '◇',
+  Vault: '◈',
 };
 
 const TAB_LABELS: Record<string, string> = {
   Today: 'Today',
-  Missions: 'Missions',
+  Evidence: 'Evidence',
   Oath: '',
-  Momentum: 'Momentum',
+  Memory: 'Memory',
   Vault: 'Vault',
 };
 

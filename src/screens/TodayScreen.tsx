@@ -9,6 +9,7 @@ import { Atmosphere } from '@/components/layout/Atmosphere';
 const SkiaOrb = React.lazy(() => import('@/components/ui/SkiaOrb'));
 import { threshold } from '@/data/mock';
 import { useRealm } from '@/context/RealmContext';
+import { useCovenant } from '@/context/CovenantContext';
 import { colors, spacing, typography } from '@/design/tokens';
 import type { RootStackParamList } from '@/types';
 
@@ -35,6 +36,7 @@ type Beat =
  */
 export function TodayScreen() {
   const { realm, realmKey } = useRealm();
+  const { covenant, memories } = useCovenant();
   const navigation = useNavigation<NativeStackNavigationProp<RootStackParamList>>();
   const { height: H } = useWindowDimensions();
   const m = threshold[realmKey];
@@ -44,13 +46,21 @@ export function TodayScreen() {
       { kind: 'speak', body: `${greetingWord()}, ${m.greetingName}.`, hold: 2400 },
       { kind: 'speak', lead: m.lead, body: m.observation, hold: 3800 },
     ];
-    if (m.memory) {
+    // Surface the real covenant promise as the memory beat when available.
+    const significantMemory = memories.find((mem) => mem.emotionalWeight >= 0.85 && mem.type !== 'promise');
+    if (covenant && m.memory) {
+      const timeAgo = significantMemory
+        ? `${Math.round((Date.now() - significantMemory.date) / (24 * 60 * 60 * 1000))} days ago, you said`
+        : m.memory.timeAgo;
+      const words = significantMemory ? significantMemory.content : covenant.promise;
+      arr.push({ kind: 'memory', timeAgo, words, kept: m.memory.kept, hold: 5200 });
+    } else if (m.memory) {
       arr.push({ kind: 'memory', timeAgo: m.memory.timeAgo, words: m.memory.words, kept: m.memory.kept, hold: 5200 });
     }
     arr.push({ kind: 'ask', body: m.reflect });
     return arr;
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [realmKey]);
+  }, [realmKey, covenant?.id, memories.length]);
 
   // The felt layers of the scene.
   const approach = useRef(new Animated.Value(0)).current; // the presence draws near

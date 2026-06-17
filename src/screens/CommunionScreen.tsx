@@ -25,6 +25,7 @@ import {
   verbMemory,
   witnessMemory,
 } from '@/data/memoryStore';
+import { useCovenant } from '@/context/CovenantContext';
 import { useRealm } from '@/context/RealmContext';
 import { colors, spacing, typography } from '@/design/tokens';
 
@@ -41,6 +42,7 @@ type Phase = 'open' | 'receiving' | 'witnessed' | 'answered';
  */
 export function CommunionScreen() {
   const { realm, realmKey } = useRealm();
+  const { addMemory, covenant } = useCovenant();
   const insets = useSafeAreaInsets();
   const navigation = useNavigation();
   const voice = communion[realmKey];
@@ -102,6 +104,16 @@ export function CommunionScreen() {
     if (spec.creates) {
       const kind = spec.kind ?? senseKind(text);
       const m = witnessMemory({ kind, words: text.trim(), realm: realmKey });
+      // Also persist to the real Memory Graph so it surfaces in the Manifestation Engine.
+      addMemory({
+        type: kind === 'promise' ? 'promise' : kind === 'breakthrough' ? 'breakthrough' : kind === 'struggle' ? 'struggle' : kind === 'realization' ? 'truth' : 'reflection',
+        title: text.trim().slice(0, 60),
+        content: text.trim(),
+        emotionalWeight: kind === 'turning_point' || kind === 'breakthrough' ? 0.85 : 0.65,
+        source: 'communion',
+        realm: realmKey,
+        linkedPromiseId: covenant?.id,
+      });
       // The world deepens, and the moment is sealed.
       setTimeout(() => {
         setMemory(m);
