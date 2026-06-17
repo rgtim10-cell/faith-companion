@@ -6,6 +6,7 @@ import type {
   UserProfile,
   VaultMemory,
 } from '@/types';
+import type { RealmKey } from '@/design/realms';
 
 export const userProfile: UserProfile = {
   name: 'Marcus Bell',
@@ -153,6 +154,78 @@ export const journalEntries: JournalEntry[] = [
     mood: 'low',
   },
 ];
+
+// ── The Threshold ─────────────────────────────────────────────
+// What OATH composes when you arrive. Three movements, never more:
+//   SEE      — one thing OATH has observed ("I've noticed...")
+//   REMEMBER — a moment from your past, surfaced only when it's earned
+//   INVITE   — an open question. Never a command.
+// OATH reveals. OATH invites. OATH keeps your word. OATH earns the right
+// to speak — when nothing is earned, `memory` is simply absent and OATH
+// stays quiet rather than performing intimacy it hasn't earned.
+export interface ThresholdComposition {
+  greetingName: string;
+  lead: string;          // SEE — the soft opening ("I've noticed something.")
+  observation: string;   // SEE — what OATH has come to see in you
+  memory?: {             // REMEMBER — optional. Present only when earned.
+    timeAgo: string;
+    words: string;       // your own words, kept
+    kept: string;        // OATH's quiet reflection on them
+  };
+  reflect: string;       // INVITE — an open question, for reflection, never instruction
+  listening: string;     // what OATH says as it waits, attending
+}
+
+export const threshold: Record<RealmKey, ThresholdComposition> = {
+  presence: {
+    greetingName: userProfile.firstName,
+    lead: "I've noticed something.",
+    observation: 'Your strongest days have always begun with movement.',
+    memory: {
+      timeAgo: '67 days ago, you told me',
+      words: 'I want to become someone I could be proud of.',
+      kept: "You've kept that promise more often than you've broken it.",
+    },
+    reflect: 'What are you noticing?',
+    listening: "I'm here when you're ready.",
+  },
+  future_self: {
+    greetingName: userProfile.firstName,
+    lead: 'I can see something forming in you.',
+    observation: 'The person you wanted to become is already showing up in the small things.',
+    memory: {
+      timeAgo: '31 days ago, after the setback, you said',
+      words: "I won't let one miss define me.",
+      kept: "It didn't. You've shown up thirty-one times since.",
+    },
+    reflect: 'Does that feel true?',
+    listening: "Take your time. I'm with you.",
+  },
+  mission_control: {
+    greetingName: userProfile.firstName,
+    lead: "I've been watching the patterns.",
+    observation: 'You move with the most clarity when you protect your first hour.',
+    memory: {
+      timeAgo: '19 days ago, you noticed',
+      words: '9 PM is when my resolve weakens. I need to protect that hour.',
+      kept: "You've been guarding it ever since. I saw that.",
+    },
+    reflect: "What's getting in the way?",
+    listening: "I'm listening.",
+  },
+  alignment: {
+    greetingName: userProfile.firstName,
+    lead: "Let's slow down for a moment.",
+    observation: 'Not everything asking for your attention today actually deserves it.',
+    memory: {
+      timeAgo: '8 days ago, after the hardest week, you wrote',
+      words: 'Discipline is just delayed gratification. I can delay.',
+      kept: 'You meant it. I’ve watched you live it since.',
+    },
+    reflect: 'Tell me what you see.',
+    listening: 'No rush. I’m right here.',
+  },
+};
 
 export const aiInsights: Record<string, AIInsightData> = {
   Today: {

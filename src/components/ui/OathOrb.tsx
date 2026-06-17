@@ -1,5 +1,5 @@
 import React, { useEffect, useRef } from 'react';
-import { Animated, StyleSheet, View } from 'react-native';
+import { Animated, Pressable, StyleSheet, View } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useRealm } from '@/context/RealmContext';
 
@@ -9,6 +9,12 @@ interface OathOrbProps {
   size?: OrbSize;
   animated?: boolean;
   style?: object;
+  /** External 0→1 intensity. Drive this to make OATH brighten/swell as it "speaks". */
+  pulse?: Animated.Value;
+  /** When true, OATH emits a slow expanding halo — the feeling of waiting, attending. */
+  listening?: boolean;
+  /** Makes the orb respond to touch (ripple + brighten). */
+  onPress?: () => void;
 }
 
 const sizePx: Record<OrbSize, number> = {
@@ -18,7 +24,14 @@ const sizePx: Record<OrbSize, number> = {
   xl: 200,
 };
 
-export function OathOrb({ size = 'md', animated: isAnimated = true, style }: OathOrbProps) {
+export function OathOrb({
+  size = 'md',
+  animated: isAnimated = true,
+  style,
+  pulse,
+  listening = false,
+  onPress,
+}: OathOrbProps) {
   const { realm } = useRealm();
   const px = sizePx[size];
 
@@ -29,6 +42,19 @@ export function OathOrb({ size = 'md', animated: isAnimated = true, style }: Oat
   const ring2Rotate = useRef(new Animated.Value(0)).current;
   const ring3Rotate = useRef(new Animated.Value(0)).current;
   const ring3Opacity = useRef(new Animated.Value(0.5)).current;
+
+  // Awareness layers
+  const halo = useRef(new Animated.Value(0)).current;   // listening
+  const touch = useRef(new Animated.Value(0)).current;  // reaction to being touched
+  const zero = useRef(new Animated.Value(0)).current;
+
+  // Combined "awareness intensity": what OATH is feeling right now.
+  // external pulse (speaking / remembering) + touch (being met).
+  const intensityRef = useRef<Animated.Animated | null>(null);
+  if (!intensityRef.current) {
+    intensityRef.current = Animated.add(pulse ?? zero, touch);
+  }
+  const intensity = intensityRef.current as Animated.AnimatedAddition<number>;
 
   useEffect(() => {
     if (!isAnimated) return;
@@ -54,17 +80,14 @@ export function OathOrb({ size = 'md', animated: isAnimated = true, style }: Oat
       ]),
     ).start();
 
-    // Outer ring — slow clockwise
     Animated.loop(
       Animated.timing(ringRotate, { toValue: 1, duration: 28000, useNativeDriver: true }),
     ).start();
 
-    // Mid ring — counter-clockwise
     Animated.loop(
       Animated.timing(ring2Rotate, { toValue: 1, duration: 18000, useNativeDriver: true }),
     ).start();
 
-    // Inner bright ring — fast clockwise
     Animated.loop(
       Animated.timing(ring3Rotate, { toValue: 1, duration: 9000, useNativeDriver: true }),
     ).start();
@@ -87,6 +110,31 @@ export function OathOrb({ size = 'md', animated: isAnimated = true, style }: Oat
     };
   }, [isAnimated, breathScale, outerGlowOpacity, innerGlowOpacity, ringRotate, ring2Rotate, ring3Rotate, ring3Opacity]);
 
+  // Listening — a slow halo breathes outward while OATH attends.
+  useEffect(() => {
+    if (!listening || !isAnimated) {
+      halo.stopAnimation();
+      halo.setValue(0);
+      return;
+    }
+    halo.setValue(0);
+    const loop = Animated.loop(
+      Animated.timing(halo, { toValue: 1, duration: 3000, useNativeDriver: true }),
+    );
+    loop.start();
+    return () => {
+      loop.stop();
+      halo.setValue(0);
+    };
+  }, [listening, isAnimated, halo]);
+
+  const handlePressIn = () => {
+    Animated.spring(touch, { toValue: 1, useNativeDriver: true, speed: 40, bounciness: 0 }).start();
+  };
+  const handlePressOut = () => {
+    Animated.spring(touch, { toValue: 0, useNativeDriver: true, speed: 12, bounciness: 6 }).start();
+  };
+
   const ringCWDeg = ringRotate.interpolate({ inputRange: [0, 1], outputRange: ['0deg', '360deg'] });
   const ringCCWDeg = ring2Rotate.interpolate({ inputRange: [0, 1], outputRange: ['360deg', '0deg'] });
   const ring3Deg = ring3Rotate.interpolate({ inputRange: [0, 1], outputRange: ['0deg', '360deg'] });
@@ -97,18 +145,62 @@ export function OathOrb({ size = 'md', animated: isAnimated = true, style }: Oat
   const outerRingSize = px * 1.9;
   const midRingSize = px * 1.48;
   const innerRingSize = px * 1.18;
+  const rippleSize = px * 1.34;
 
-  return (
+  // Awareness-driven derived values
+  const coreScale = Animated.add(breathScale, Animated.multiply(intensity, 0.05));
+  const rimOpacity = Animated.add(innerGlowOpacity, Animated.multiply(intensity, 0.5));
+  const brightRingOpacity = Animated.add(ring3Opacity, Animated.multiply(intensity, 0.4));
+  const rippleOpacity = Animated.multiply(intensity, 0.55);
+  const rippleScale = Animated.add(1, Animated.multiply(intensity, 0.26));
+  const atmosphereOpacity = Animated.add(outerGlowOpacity, Animated.multiply(intensity, 0.35));
+
+  const haloScale = halo.interpolate({ inputRange: [0, 1], outputRange: [1, 1.7] });
+  const haloOpacity = halo.interpolate({ inputRange: [0, 0.12, 1], outputRange: [0, 0.42, 0] });
+
+  const orbBody = (
     <View style={[{ width: containerSize, height: containerSize, alignItems: 'center', justifyContent: 'center' }, style]}>
 
-      {/* Atmospheric outer glow */}
+      {/* Listening halo — OATH attending */}
+      <Animated.View
+        style={[
+          styles.ring,
+          {
+            width: outerRingSize,
+            height: outerRingSize,
+            borderRadius: outerRingSize / 2,
+            borderColor: accent,
+            borderWidth: 1,
+            opacity: haloOpacity,
+            transform: [{ scale: haloScale }],
+          },
+        ]}
+      />
+
+      {/* Atmospheric outer glow — swells when OATH speaks */}
       <Animated.View
         style={[
           StyleSheet.absoluteFill,
           {
             borderRadius: containerSize / 2,
             backgroundColor: realm.accentMuted,
-            opacity: outerGlowOpacity,
+            opacity: atmosphereOpacity,
+          },
+        ]}
+      />
+
+      {/* Speak ripple — a pulse of awareness pushing outward */}
+      <Animated.View
+        style={[
+          styles.ring,
+          {
+            width: rippleSize,
+            height: rippleSize,
+            borderRadius: rippleSize / 2,
+            borderColor: accent,
+            borderWidth: 1.5,
+            opacity: rippleOpacity,
+            transform: [{ scale: rippleScale }],
           },
         ]}
       />
@@ -144,7 +236,7 @@ export function OathOrb({ size = 'md', animated: isAnimated = true, style }: Oat
         ]}
       />
 
-      {/* Inner bright ring — fast CW, pulsing */}
+      {/* Inner bright ring — fast CW, brightens with awareness */}
       <Animated.View
         style={[
           styles.ring,
@@ -154,13 +246,13 @@ export function OathOrb({ size = 'md', animated: isAnimated = true, style }: Oat
             borderRadius: innerRingSize / 2,
             borderColor: accent,
             borderWidth: 1.5,
-            opacity: ring3Opacity,
+            opacity: brightRingOpacity,
             transform: [{ rotate: ring3Deg }],
           },
         ]}
       />
 
-      {/* Core orb — breathing */}
+      {/* Core orb — breathing, swelling slightly when OATH speaks or is touched */}
       <Animated.View
         style={[
           styles.core,
@@ -168,12 +260,11 @@ export function OathOrb({ size = 'md', animated: isAnimated = true, style }: Oat
             width: px,
             height: px,
             borderRadius: px / 2,
-            transform: [{ scale: breathScale }],
+            transform: [{ scale: coreScale }],
             shadowColor: accent,
           },
         ]}
       >
-        {/* Gradient: very dark center → accent at edge */}
         <LinearGradient
           colors={realm.orbColors as [string, string, string, string]}
           start={{ x: 0.5, y: 0.1 }}
@@ -181,14 +272,14 @@ export function OathOrb({ size = 'md', animated: isAnimated = true, style }: Oat
           style={[styles.fill, { borderRadius: px / 2 }]}
         />
 
-        {/* Subtle rim glow */}
+        {/* Rim glow — intensifies with awareness */}
         <Animated.View
           style={[
             styles.fill,
             {
               borderRadius: px / 2,
               backgroundColor: accent,
-              opacity: innerGlowOpacity,
+              opacity: rimOpacity,
             },
           ]}
         />
@@ -222,6 +313,16 @@ export function OathOrb({ size = 'md', animated: isAnimated = true, style }: Oat
       </Animated.View>
     </View>
   );
+
+  if (onPress) {
+    return (
+      <Pressable onPress={onPress} onPressIn={handlePressIn} onPressOut={handlePressOut}>
+        {orbBody}
+      </Pressable>
+    );
+  }
+
+  return orbBody;
 }
 
 const styles = StyleSheet.create({

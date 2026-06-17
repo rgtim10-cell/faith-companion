@@ -1,386 +1,275 @@
-import React, { useEffect, useRef } from 'react';
-import { Animated, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
-import { useNavigation } from '@react-navigation/native';
-import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
-import { ScreenWrapper } from '@/components/layout/ScreenWrapper';
-import { GlassCard } from '@/components/ui/GlassCard';
-import { MissionCard } from '@/components/ui/MissionCard';
+import React, { useEffect, useRef, useState } from 'react';
+import { Animated, ScrollView, StyleSheet, Text, View } from 'react-native';
+import type { ScrollView as ScrollViewType } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import * as Haptics from 'expo-haptics';
+import { RealmBackground } from '@/components/layout/RealmBackground';
 import { OathOrb } from '@/components/ui/OathOrb';
-import {
-  aiInsights,
-  alignmentScore,
-  missions,
-  momentumScore,
-  oathSuggestion,
-  userProfile,
-  weeklyMomentum,
-} from '@/data/mock';
+import { threshold } from '@/data/mock';
 import { useRealm } from '@/context/RealmContext';
-import { colors, radius, spacing, typography } from '@/design/tokens';
-import type { RootStackParamList } from '@/types';
+import { colors, spacing, typography } from '@/design/tokens';
 
-type Nav = NativeStackNavigationProp<RootStackParamList>;
-
-const recommendedMission = missions.find((m) => m.id === oathSuggestion.missionId)!;
-const otherMissions = missions.filter((m) => m.status !== 'locked' && m.id !== oathSuggestion.missionId).slice(0, 2);
-
-function greeting(): string {
+function greetingWord(): string {
   const h = new Date().getHours();
-  if (h < 12) return 'Good morning,';
-  if (h < 17) return 'Good afternoon,';
-  return 'Good evening,';
+  if (h < 12) return 'Good morning';
+  if (h < 17) return 'Good afternoon';
+  return 'Good evening';
 }
 
-function MiniSparkline({ values, color }: { values: number[]; color: string }) {
-  const max = Math.max(...values);
-  const min = Math.min(...values);
-  const range = max - min || 1;
-  const W = 56, H = 18;
-  const step = W / (values.length - 1);
+/**
+ * The Threshold.
+ *
+ * Not a screen. A presence. OATH speaks one continuous thought — it greets,
+ * it sees, it remembers (slowly, like testimony), and it asks an open
+ * question. The orb breathes through the whole thing: it swells before each
+ * line, draws a slow breath when the memory surfaces, and settles into
+ * listening when it finishes. No cards. No buttons. No instructions.
+ */
+export function TodayScreen() {
+  const { realm, realmKey } = useRealm();
+  const insets = useSafeAreaInsets();
+  const moment = threshold[realmKey];
+
+  // Each line of OATH's thought surfaces on its own.
+  const greet = useRef(new Animated.Value(0)).current;
+  const lead = useRef(new Animated.Value(0)).current;
+  const obs = useRef(new Animated.Value(0)).current;
+  const memTime = useRef(new Animated.Value(0)).current;
+  const memWords = useRef(new Animated.Value(0)).current;
+  const memKept = useRef(new Animated.Value(0)).current;
+  const reflect = useRef(new Animated.Value(0)).current;
+  const listenLine = useRef(new Animated.Value(0)).current;
+
+  // The orb's felt state — drives its glow and swell.
+  const pulse = useRef(new Animated.Value(0)).current;
+  const [listening, setListening] = useState(false);
+  const scrollRef = useRef<ScrollViewType>(null);
+
+  useEffect(() => {
+    const lines = [greet, lead, obs, memTime, memWords, memKept, reflect, listenLine];
+    lines.forEach((v) => v.setValue(0));
+    pulse.setValue(0);
+    setListening(false);
+
+    const rise = (v: Animated.Value, delay: number, duration = 850) =>
+      Animated.timing(v, { toValue: 1, duration, delay, useNativeDriver: true });
+
+    const hasMemory = Boolean(moment.memory);
+
+    // The words stream in at a speaking cadence. The memory takes its time.
+    const reveal = Animated.parallel([
+      rise(greet, 300),
+      rise(lead, 1150),
+      rise(obs, 1950),
+      ...(hasMemory
+        ? [
+            rise(memTime, 3300, 1000),
+            rise(memWords, 4500, 1500), // sacred — slow
+            rise(memKept, 6100, 1100),
+          ]
+        : []),
+      rise(reflect, hasMemory ? 7500 : 3300, 1000),
+      rise(listenLine, hasMemory ? 8500 : 4300, 1100),
+    ]);
+
+    // The orb's breath of speech — a small swell before each line, and one
+    // long, deep swell as the memory surfaces (it feels different to remember).
+    const speak = (up: number, upDur: number, downDur: number) =>
+      Animated.sequence([
+        Animated.timing(pulse, { toValue: up, duration: upDur, useNativeDriver: true }),
+        Animated.timing(pulse, { toValue: 0, duration: downDur, useNativeDriver: true }),
+      ]);
+
+    const breath = Animated.sequence([
+      Animated.delay(180),
+      speak(0.35, 220, 520),            // greeting
+      Animated.delay(230),
+      speak(0.35, 220, 520),            // lead
+      Animated.delay(230),
+      speak(0.4, 220, 560),             // observation
+      ...(hasMemory
+        ? [Animated.delay(520), speak(1, 520, 1500)] // remembering — deep, slow
+        : []),
+      Animated.delay(hasMemory ? 700 : 520),
+      speak(0.4, 220, 600),             // the question
+    ]);
+
+    reveal.start();
+    breath.start(({ finished }) => {
+      if (finished) {
+        setListening(true);
+        // As OATH finishes speaking, the conversation settles toward its
+        // question — a gentle drift, not a jump.
+        requestAnimationFrame(() => scrollRef.current?.scrollToEnd({ animated: true }));
+      }
+    });
+
+    return () => {
+      reveal.stop();
+      breath.stop();
+    };
+    // re-compose whenever the realm shifts — atmosphere, voice, memory, all
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [realmKey]);
+
+  const flow = (v: Animated.Value) => ({
+    opacity: v,
+    transform: [{ translateY: v.interpolate({ inputRange: [0, 1], outputRange: [14, 0] }) }],
+  });
+
+  const onOrbTouch = () => {
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+  };
+
   return (
-    <View style={{ width: W, height: H }}>
-      {values.map((v, i) => {
-        if (i === 0) return null;
-        const x1 = (i - 1) * step;
-        const y1 = H - ((values[i - 1] - min) / range) * H;
-        const x2 = i * step;
-        const y2 = H - ((v - min) / range) * H;
-        const len = Math.sqrt((x2 - x1) ** 2 + (y2 - y1) ** 2);
-        const angle = (Math.atan2(y2 - y1, x2 - x1) * 180) / Math.PI;
-        return (
-          <View key={i} style={{ position: 'absolute', left: x1, top: y1, width: len, height: 1.5,
-            backgroundColor: color, opacity: i === values.length - 1 ? 1 : 0.45,
-            transform: [{ rotate: `${angle}deg` }] }} />
-        );
-      })}
+    <View style={styles.container}>
+      <RealmBackground />
+
+      {/* OATH — present at the top of everything it says */}
+      <View style={[styles.crown, { paddingTop: insets.top + spacing.lg }]}>
+        <Text style={[styles.wordmark, { color: realm.accentSoft }]}>OATH</Text>
+        <View style={styles.orbWrap}>
+          <OathOrb size="lg" pulse={pulse} listening={listening} onPress={onOrbTouch} />
+        </View>
+      </View>
+
+      {/* One continuous thought */}
+      <ScrollView
+        ref={scrollRef}
+        style={styles.scroll}
+        showsVerticalScrollIndicator={false}
+        contentContainerStyle={[styles.stream, { paddingBottom: insets.bottom + 116 }]}
+      >
+        <Animated.Text style={[styles.greeting, flow(greet)]}>
+          {greetingWord()}, {moment.greetingName}.
+        </Animated.Text>
+
+        <Animated.Text style={[styles.lead, flow(lead), { color: realm.accentSoft }]}>
+          {moment.lead}
+        </Animated.Text>
+
+        <Animated.Text style={[styles.observation, flow(obs)]}>
+          {moment.observation}
+        </Animated.Text>
+
+        {moment.memory && (
+          <View style={styles.memory}>
+            <Animated.Text style={[styles.memoryTime, flow(memTime), { color: realm.accentSoft }]}>
+              {moment.memory.timeAgo}
+            </Animated.Text>
+            <Animated.Text style={[styles.memoryWords, flow(memWords)]}>
+              “{moment.memory.words}”
+            </Animated.Text>
+            <Animated.Text style={[styles.memoryKept, flow(memKept)]}>
+              {moment.memory.kept}
+            </Animated.Text>
+          </View>
+        )}
+
+        <Animated.Text style={[styles.reflect, flow(reflect)]}>
+          {moment.reflect}
+        </Animated.Text>
+
+        <Animated.Text style={[styles.listening, flow(listenLine), { color: realm.accentSoft }]}>
+          {moment.listening}
+        </Animated.Text>
+      </ScrollView>
     </View>
   );
 }
 
-export function TodayScreen() {
-  const { realm } = useRealm();
-  const navigation = useNavigation<Nav>();
-  const livePulse = useRef(new Animated.Value(1)).current;
-
-  useEffect(() => {
-    Animated.loop(
-      Animated.sequence([
-        Animated.timing(livePulse, { toValue: 0.2, duration: 1000, useNativeDriver: true }),
-        Animated.timing(livePulse, { toValue: 1, duration: 1000, useNativeDriver: true }),
-      ]),
-    ).start();
-    return () => livePulse.stopAnimation();
-  }, [livePulse]);
-
-  return (
-    <ScreenWrapper>
-      {/* Header */}
-      <View style={styles.header}>
-        <Text style={[styles.appName, { color: realm.accentSoft }]}>OATH</Text>
-        <View style={styles.liveRow}>
-          <Animated.View style={[styles.liveDot, { backgroundColor: realm.accent, opacity: livePulse }]} />
-          <Text style={[styles.liveLabel, { color: realm.accentSoft }]}>LIVE</Text>
-        </View>
-      </View>
-
-      {/* OATH speaks first */}
-      <View style={styles.greetingBlock}>
-        <Text style={[styles.greetingLine, { color: colors.textSecondary }]}>{greeting()}</Text>
-        <Text style={styles.greetingName}>{userProfile.firstName}.</Text>
-        <Text style={[styles.oathVoice, { color: colors.textSecondary }]}>
-          {realm.morningStatement}
-        </Text>
-      </View>
-
-      {/* The presence — orb centered */}
-      <View style={styles.orbContainer}>
-        <OathOrb size="lg" />
-      </View>
-
-      {/* OATH's observation — not a card title, OATH speaking */}
-      <GlassCard padding="lg" style={[styles.presenceCard, { borderColor: realm.accent + '33' }]}>
-        <View style={styles.presenceHeader}>
-          <Animated.View style={[styles.presenceDot, { backgroundColor: realm.accent, opacity: livePulse }]} />
-          <Text style={[styles.presenceLabel, { color: realm.accent }]}>OATH PRESENCE</Text>
-        </View>
-        <Text style={styles.presenceText}>{aiInsights.Today.text}</Text>
-        <TouchableOpacity style={styles.viewMore}>
-          <Text style={[styles.viewMoreText, { color: realm.accentSoft }]}>See full insight  →</Text>
-        </TouchableOpacity>
-      </GlassCard>
-
-      {/* OATH's observations — alignment + momentum as what OATH sees, not stats */}
-      <View style={styles.observationsRow}>
-        <GlassCard padding="md" style={styles.observationCard}>
-          <Text style={[styles.obsLabel, { color: realm.accentSoft }]}>ALIGNMENT</Text>
-          <Text style={[styles.obsValue, { color: colors.text }]}>{alignmentScore}%</Text>
-          <Text style={[styles.obsSub, { color: colors.textSubtle }]}>Aligned with{'\n'}your future self</Text>
-          <View style={[styles.obsBar, { backgroundColor: colors.border }]}>
-            <View style={[styles.obsBarFill, { width: `${alignmentScore}%` as `${number}%`, backgroundColor: realm.accent }]} />
-          </View>
-        </GlassCard>
-
-        <GlassCard padding="md" style={styles.observationCard}>
-          <Text style={[styles.obsLabel, { color: realm.accentSoft }]}>MOMENTUM</Text>
-          <Text style={[styles.obsValueLg, { color: colors.text }]}>{momentumScore}</Text>
-          <Text style={[styles.obsSub, { color: colors.textSubtle }]}>High</Text>
-          <MiniSparkline values={weeklyMomentum} color={realm.accent} />
-        </GlassCard>
-      </View>
-
-      {/* Today's Oath — OATH retrieved this for you */}
-      <GlassCard padding="lg" style={styles.oathCard}>
-        <Text style={[styles.oathLabel, { color: realm.accentSoft }]}>TODAY'S OATH</Text>
-        <Text style={styles.oathText}>"{userProfile.oath}"</Text>
-        <View style={[styles.oathFooter, { borderTopColor: colors.border }]}>
-          <View style={styles.acceptedRow}>
-            <View style={[styles.checkCircle, { backgroundColor: realm.accentMuted, borderColor: realm.accent + '55' }]}>
-              <Text style={[styles.checkMark, { color: realm.accent }]}>✓</Text>
-            </View>
-            <Text style={[styles.acceptedLabel, { color: realm.accentSoft }]}>OATH ACCEPTED</Text>
-          </View>
-          <Text style={[styles.streakLabel, { color: colors.textSubtle }]}>{userProfile.streak} day streak</Text>
-        </View>
-      </GlassCard>
-
-      {/* OATH recommends — curated, not listed */}
-      <View style={styles.missionsBlock}>
-        <View style={styles.missionsHeader}>
-          <Text style={[styles.missionsEyebrow, { color: realm.accentSoft }]}>OATH RECOMMENDS</Text>
-          <TouchableOpacity>
-            <Text style={[styles.seeAll, { color: realm.accent }]}>See all</Text>
-          </TouchableOpacity>
-        </View>
-
-        {/* Lead mission — OATH's top pick */}
-        <MissionCard mission={recommendedMission} />
-
-        {/* Supporting missions */}
-        {otherMissions.map((m) => (
-          <MissionCard key={m.id} mission={m} />
-        ))}
-      </View>
-
-      {/* Night reflection — OATH invites */}
-      <TouchableOpacity
-        style={[styles.nightCta, { borderColor: realm.accent + '33', backgroundColor: realm.accentMuted }]}
-        onPress={() => navigation.navigate('NightReflection')}
-      >
-        <Text style={[styles.nightIcon, { color: realm.accent }]}>◑</Text>
-        <View style={styles.nightTextBlock}>
-          <Text style={[styles.nightTitle, { color: realm.accentSoft }]}>Let's review your day</Text>
-          <Text style={[styles.nightSub, { color: colors.textSubtle }]}>
-            I'll help you make sense of what happened.
-          </Text>
-        </View>
-      </TouchableOpacity>
-    </ScreenWrapper>
-  );
-}
-
 const styles = StyleSheet.create({
-  header: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
+  container: {
+    flex: 1,
+  },
+  crown: {
     alignItems: 'center',
-    marginBottom: spacing.lg,
+    paddingBottom: spacing.xs,
   },
-  appName: {
-    ...typography.labelLg,
-    fontSize: 13,
-    letterSpacing: 3,
+  wordmark: {
+    fontSize: 12,
+    fontWeight: '600',
+    letterSpacing: 7,
+    opacity: 0.5,
+    marginBottom: spacing.sm,
   },
-  liveRow: {
-    flexDirection: 'row',
+  orbWrap: {
+    marginVertical: -34,
+  },
+  scroll: {
+    flex: 1,
+  },
+  stream: {
+    paddingHorizontal: spacing.xl,
     alignItems: 'center',
-    gap: 5,
   },
-  liveDot: {
-    width: 6,
-    height: 6,
-    borderRadius: 3,
-  },
-  liveLabel: {
-    ...typography.labelSm,
-    letterSpacing: 2,
-  },
-  greetingBlock: {
-    marginBottom: spacing.lg,
-  },
-  greetingLine: {
+  greeting: {
     ...typography.headingMd,
     fontWeight: '300',
+    color: colors.textSecondary,
+    textAlign: 'center',
+    marginTop: spacing.md,
   },
-  greetingName: {
-    fontSize: 42,
-    fontWeight: '700',
+  lead: {
+    fontSize: 14,
+    fontWeight: '500',
+    letterSpacing: 0.2,
+    textAlign: 'center',
+    marginTop: spacing.lg,
+  },
+  observation: {
+    fontSize: 26,
+    fontWeight: '500',
     color: colors.text,
-    letterSpacing: -2,
-    lineHeight: 48,
-    marginBottom: spacing.xs,
+    letterSpacing: -0.6,
+    lineHeight: 35,
+    textAlign: 'center',
+    marginTop: spacing.sm,
+    maxWidth: 330,
   },
-  oathVoice: {
-    ...typography.bodyLg,
-    lineHeight: 24,
+  // The memory — given air. Testimony, not content.
+  memory: {
+    alignItems: 'center',
+    marginTop: spacing.xxl,
+    marginBottom: spacing.xl,
+    maxWidth: 320,
+  },
+  memoryTime: {
+    ...typography.labelSm,
+    letterSpacing: 1.4,
+    textAlign: 'center',
+    marginBottom: spacing.lg,
+  },
+  memoryWords: {
+    fontSize: 21,
     fontStyle: 'italic',
+    fontWeight: '400',
+    color: colors.text,
+    lineHeight: 32,
+    letterSpacing: -0.2,
+    textAlign: 'center',
   },
-  orbContainer: {
-    alignItems: 'center',
-    marginBottom: spacing.lg,
-  },
-  presenceCard: {
-    marginBottom: spacing.lg,
-    gap: spacing.sm,
-    borderWidth: 1,
-  },
-  presenceHeader: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 6,
-  },
-  presenceDot: {
-    width: 6,
-    height: 6,
-    borderRadius: 3,
-  },
-  presenceLabel: {
-    ...typography.labelMd,
-    letterSpacing: 1.5,
-  },
-  presenceText: {
+  memoryKept: {
     ...typography.bodyMd,
-    color: colors.text,
+    color: colors.textSecondary,
     lineHeight: 22,
+    textAlign: 'center',
+    marginTop: spacing.lg,
   },
-  viewMore: {
-    marginTop: 2,
-  },
-  viewMoreText: {
-    ...typography.labelMd,
-    fontWeight: '600',
-  },
-  observationsRow: {
-    flexDirection: 'row',
-    gap: spacing.sm,
-    marginBottom: spacing.lg,
-  },
-  observationCard: {
-    flex: 1,
-    gap: 4,
-  },
-  obsLabel: {
-    ...typography.labelSm,
-    letterSpacing: 1.5,
-  },
-  obsValue: {
-    fontSize: 30,
-    fontWeight: '700',
-    letterSpacing: -1.5,
-    lineHeight: 34,
-  },
-  obsValueLg: {
-    fontSize: 38,
-    fontWeight: '700',
-    letterSpacing: -2,
-    lineHeight: 42,
-  },
-  obsSub: {
-    ...typography.bodySm,
-    lineHeight: 16,
-    marginBottom: 4,
-  },
-  obsBar: {
-    height: 2,
-    borderRadius: 1,
-    marginTop: 4,
-    overflow: 'hidden',
-  },
-  obsBarFill: {
-    height: '100%',
-    borderRadius: 1,
-  },
-  oathCard: {
-    marginBottom: spacing.lg,
-    gap: spacing.md,
-  },
-  oathLabel: {
-    ...typography.labelMd,
-    letterSpacing: 1.5,
-  },
-  oathText: {
-    ...typography.oath,
-    color: colors.text,
-  },
-  oathFooter: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    borderTopWidth: StyleSheet.hairlineWidth,
-    paddingTop: spacing.sm,
-    marginTop: spacing.xs,
-  },
-  acceptedRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: spacing.xs,
-  },
-  checkCircle: {
-    width: 20,
-    height: 20,
-    borderRadius: 10,
-    borderWidth: 1,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  checkMark: {
-    fontSize: 10,
-    fontWeight: '700',
-  },
-  acceptedLabel: {
-    ...typography.labelMd,
-    letterSpacing: 1.2,
-  },
-  streakLabel: {
-    ...typography.labelSm,
-  },
-  missionsBlock: {
-    gap: spacing.sm,
-    marginBottom: spacing.lg,
-  },
-  missionsHeader: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-  },
-  missionsEyebrow: {
-    ...typography.labelLg,
-    letterSpacing: 1.5,
-  },
-  seeAll: {
-    ...typography.labelMd,
-  },
-  nightCta: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: spacing.md,
-    paddingVertical: spacing.md,
-    paddingHorizontal: spacing.lg,
-    borderRadius: radius.xl,
-    borderWidth: 1,
-    marginBottom: spacing.md,
-  },
-  nightIcon: {
+  reflect: {
     fontSize: 22,
+    fontWeight: '500',
+    color: colors.text,
+    letterSpacing: -0.3,
+    lineHeight: 30,
+    textAlign: 'center',
+    marginTop: spacing.md,
   },
-  nightTextBlock: {
-    gap: 2,
-  },
-  nightTitle: {
-    ...typography.bodySm,
-    fontWeight: '600',
-  },
-  nightSub: {
-    ...typography.labelSm,
-    lineHeight: 16,
+  listening: {
+    fontSize: 14,
+    fontStyle: 'italic',
+    textAlign: 'center',
+    marginTop: spacing.lg,
+    opacity: 0.9,
   },
 });
