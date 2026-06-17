@@ -1,13 +1,9 @@
 # dependencies
 node_modules/
 
-# build output
+# Expo
+.expo/
 dist/
-dist-ssr/
-
-# vite
-.vite/
-*.local
 
 # debug
 npm-debug.*
