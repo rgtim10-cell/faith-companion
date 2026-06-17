@@ -106,24 +106,20 @@ function buildRawManifestations(
   }
 
   // ── Evidence ───────────────────────────────────────────────
-  // User-submitted evidence takes priority — their own proof first, always.
+  // All evidence is equal regardless of source — a journal entry, a kept promise,
+  // a breakthrough, and an uploaded screenshot all carry the same weight.
+  // OATH surfaces by recency and emotional weight, not by content type.
   if (evidences.length > 0) {
-    const userSubmitted = evidences.filter((m) => m.source === 'evidence_upload');
-    const recentUserSubmitted = recentEvidence.filter((m) => m.source === 'evidence_upload');
-    const pool = recentUserSubmitted.length > 0
-      ? recentUserSubmitted
-      : userSubmitted.length > 0
-      ? userSubmitted
-      : recentEvidence.length > 0
-      ? recentEvidence
-      : evidences;
+    const pool = recentEvidence.length > 0 ? recentEvidence : evidences;
+    // Prefer highest emotional weight within the pool.
+    const ranked = [...pool].sort((a, b) => b.emotionalWeight - a.emotionalWeight);
     result.push({
       id: 'manifest_evidence',
       type: 'evidence',
       opening: covenant
         ? `You said you wanted to become someone you could be proud of.\nHere is proof you already are.`
         : 'Here is proof of your transformation.',
-      records: pool.slice(0, 3),
+      records: ranked.slice(0, 3),
       prompts: ['Connect this to my promise', 'Show me more like this', 'Why did you show me this?'],
       explanation:
         'I surface evidence when you have kept your word without realizing it. These are not coincidences — they are you, becoming.',

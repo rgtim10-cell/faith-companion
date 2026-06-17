@@ -256,10 +256,25 @@ function StepWhat({
     <View style={captureStyles.step}>
       <Text style={captureStyles.question}>What happened?</Text>
       <Text style={captureStyles.sub}>
-        Tell OATH what you did.{'\n'}Don't explain it — just say what happened.
+        A win. A kept promise. A hard conversation.{'\n'}
+        A day you showed up. OATH will interpret what it means.
       </Text>
 
-      {/* Photo / screenshot placeholder */}
+      {/* Text input — the primary way to add proof */}
+      <View style={captureStyles.inputBlock}>
+        <TextInput
+          value={text}
+          onChangeText={onChangeText}
+          placeholder={'First client signed.\nWoke up at 5am for the 7th day.\nHad the conversation I\'d been avoiding.'}
+          placeholderTextColor="rgba(255,255,255,0.18)"
+          style={captureStyles.input}
+          multiline
+          autoFocus
+          selectionColor={ACCENT}
+        />
+      </View>
+
+      {/* Photo / screenshot — secondary, clearly optional */}
       <TouchableOpacity onPress={onToggleImage} activeOpacity={0.8} style={[captureStyles.imagePlaceholder, hasImage && captureStyles.imageAttached]}>
         {hasImage ? (
           <View style={captureStyles.imagePreview}>
@@ -272,24 +287,10 @@ function StepWhat({
         ) : (
           <>
             <Text style={captureStyles.cameraGlyph}>⬡</Text>
-            <Text style={captureStyles.imagePlaceholderLabel}>Add photo or screenshot</Text>
-            <Text style={captureStyles.imagePlaceholderSub}>optional</Text>
+            <Text style={captureStyles.imagePlaceholderLabel}>Attach photo or screenshot — optional</Text>
           </>
         )}
       </TouchableOpacity>
-
-      <View style={captureStyles.inputBlock}>
-        <TextInput
-          value={text}
-          onChangeText={onChangeText}
-          placeholder={'First client signed.\nFinished the project.\nWoke up at 5am for 7 days.'}
-          placeholderTextColor="rgba(255,255,255,0.18)"
-          style={captureStyles.input}
-          multiline
-          autoFocus
-          selectionColor={ACCENT}
-        />
-      </View>
 
       {text.trim().length > 3 && (
         <TouchableOpacity onPress={onNext} style={captureStyles.nextBtn} activeOpacity={0.8}>
@@ -428,9 +429,9 @@ function EmptyState({ onStart }: { onStart: () => void }) {
       <Text style={styles.emptyGlyph}>◆</Text>
       <Text style={styles.emptyTitle}>No proof yet.</Text>
       <Text style={styles.emptySub}>
-        OATH does not generate inspiration.{'\n'}
-        It reads what you have done.{'\n'}
-        Give it something to work with.
+        Evidence can be a win, a journal entry,{'\n'}
+        a hard conversation, a kept promise.{'\n'}
+        No upload required — just truth.
       </Text>
       <TouchableOpacity onPress={onStart} style={styles.emptyBtn} activeOpacity={0.8}>
         <Text style={styles.emptyBtnText}>Add your first proof</Text>
@@ -460,6 +461,9 @@ function ProofStack({
       <View style={stackStyles.summary}>
         <Text style={stackStyles.count}>
           ◆ {records.length} proof{records.length !== 1 ? 's' : ''} of transformation
+        </Text>
+        <Text style={stackStyles.sourceNote}>
+          From wins, journal entries, conversations, and kept promises
         </Text>
         {linked.length >= 2 && (
           <Text style={stackStyles.strengthens}>
@@ -671,30 +675,30 @@ const captureStyles = StyleSheet.create({
   },
   sub: { fontSize: 14, color: colors.textSubtle, lineHeight: 21, letterSpacing: -0.1 },
 
-  // Image placeholder
+  // Image placeholder — secondary to text input
   imagePlaceholder: {
-    borderRadius: radius.lg,
+    borderRadius: radius.md,
     borderWidth: 1,
     borderStyle: 'dashed',
-    borderColor: 'rgba(255,255,255,0.12)',
-    height: 96,
+    borderColor: 'rgba(255,255,255,0.08)',
+    height: 52,
     alignItems: 'center',
     justifyContent: 'center',
-    gap: 4,
+    flexDirection: 'row',
+    gap: 8,
   },
   imageAttached: {
     borderStyle: 'solid',
     borderColor: ACCENT + '40',
     backgroundColor: ACCENT + '09',
-    height: 72,
+    height: 52,
   },
   imagePreview: { flexDirection: 'row', alignItems: 'center', gap: 12 },
   imageDoneGlyph: { fontSize: 20, color: ACCENT },
   imageAttachedLabel: { fontSize: 14, fontWeight: '500', color: ACCENT },
   imageRemove: { fontSize: 12, color: 'rgba(255,255,255,0.3)', marginTop: 2 },
   cameraGlyph: { fontSize: 22, color: 'rgba(255,255,255,0.2)' },
-  imagePlaceholderLabel: { fontSize: 13, color: 'rgba(255,255,255,0.3)', fontWeight: '500' },
-  imagePlaceholderSub: { fontSize: 11, color: 'rgba(255,255,255,0.15)' },
+  imagePlaceholderLabel: { fontSize: 12, color: 'rgba(255,255,255,0.25)', fontWeight: '400' },
 
   // Text input
   inputBlock: {
@@ -807,6 +811,7 @@ const stackStyles = StyleSheet.create({
   container: { gap: spacing.sm },
   summary: { gap: 4, marginBottom: spacing.sm },
   count: { fontSize: 13, fontWeight: '500', color: ACCENT, letterSpacing: 0.1 },
+  sourceNote: { fontSize: 11, color: 'rgba(255,255,255,0.28)', letterSpacing: 0.1 },
   strengthens: { fontSize: 11, color: ACCENT + '80', letterSpacing: 0.2 },
 });
 
