@@ -21,6 +21,7 @@ function TabNavigator() {
     <Tab.Navigator
       tabBar={(props) => <TabBar {...props} />}
       screenOptions={{ headerShown: false }}
+      initialRouteName="Oath"
     >
       <Tab.Screen name="Today" component={TodayScreen} />
       <Tab.Screen name="Evidence" component={EvidenceUploadScreen} />
