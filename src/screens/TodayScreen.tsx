@@ -1,10 +1,12 @@
-import React, { useEffect, useMemo, useRef, useState } from 'react';
+import React, { Suspense, useEffect, useMemo, useRef, useState } from 'react';
 import { Animated, Easing, StyleSheet, Text, View, useWindowDimensions } from 'react-native';
 import { useNavigation } from '@react-navigation/native';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import * as Haptics from 'expo-haptics';
 import { Atmosphere } from '@/components/layout/Atmosphere';
-import { OathOrb } from '@/components/ui/OathOrb';
+
+// Lazy so the Skia web API binds only after CanvasKit (WASM) has loaded.
+const SkiaOrb = React.lazy(() => import('@/components/ui/SkiaOrb'));
 import { threshold } from '@/data/mock';
 import { useRealm } from '@/context/RealmContext';
 import { colors, spacing, typography } from '@/design/tokens';
@@ -160,7 +162,9 @@ export function TodayScreen() {
           },
         ]}
       >
-        <OathOrb size="lg" pulse={pulse} listening={listening} onPress={onOrbTouch} />
+        <Suspense fallback={null}>
+          <SkiaOrb size={300} pulseValue={pulse} listening={listening} onPress={onOrbTouch} />
+        </Suspense>
       </Animated.View>
 
       {/* The voice — one breath at a time, in the same place, then gone */}

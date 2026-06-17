@@ -24,3 +24,6 @@ yarn-error.*
 # editor
 .vscode/*
 !.vscode/extensions.json
+
+# Skia web (CanvasKit wasm — copy from node_modules via npm run web:setup)
+public/canvaskit.wasm
