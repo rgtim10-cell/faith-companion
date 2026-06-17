@@ -58,6 +58,7 @@ export interface UserProfile {
 export type RootStackParamList = {
   Tabs: undefined;
   NightReflection: undefined;
+  Communion: undefined;
 };
 
 export type TabParamList = {

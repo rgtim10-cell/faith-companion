@@ -7,6 +7,7 @@ import type {
   VaultMemory,
 } from '@/types';
 import type { RealmKey } from '@/design/realms';
+import type { CommunionVerb } from '@/data/memoryStore';
 
 export const userProfile: UserProfile = {
   name: 'Marcus Bell',
@@ -224,6 +225,70 @@ export const threshold: Record<RealmKey, ThresholdComposition> = {
     },
     reflect: 'Tell me what you see.',
     listening: 'No rush. I’m right here.',
+  },
+};
+
+// ── Communion ─────────────────────────────────────────────────
+// OATH listening. The registers a user can speak in, and the single weighted
+// thing OATH says as it receives — never a paragraph, never an "answer".
+export const communionVerbs: { id: CommunionVerb; label: string; sub: string }[] = [
+  { id: 'confide', label: 'Confide', sub: "Tell me what's true." },
+  { id: 'commit', label: 'Commit', sub: 'Give me your word.' },
+  { id: 'mark', label: 'Mark', sub: 'Remember this moment.' },
+  { id: 'ask', label: 'Ask', sub: 'Ask what I see.' },
+  { id: 'pushback', label: 'Push back', sub: "Tell me where I'm wrong." },
+];
+
+export interface CommunionVoice {
+  invite: string;                       // the opening, as the world quiets
+  receive: Record<CommunionVerb, string>; // OATH's one line, on receiving
+  witness: string;                      // closing, once a memory is kept
+}
+
+export const communion: Record<RealmKey, CommunionVoice> = {
+  presence: {
+    invite: "I'm here. Tell me.",
+    receive: {
+      confide: 'This feels important. I have it now.',
+      commit: "Then I'll hold you to it. Gently.",
+      mark: "I'll keep this where I won't lose it.",
+      ask: 'I see someone who keeps showing up — even quietly.',
+      pushback: 'You might be right. Tell me more, and I’ll adjust.',
+    },
+    witness: "I'll carry this with you.",
+  },
+  future_self: {
+    invite: "Speak. I'm listening for who you're becoming.",
+    receive: {
+      confide: "This is part of who you're becoming. I'll remember it.",
+      commit: "A promise to your future self. I'll hold the line.",
+      mark: 'A marker on the path. Noted.',
+      ask: 'I see someone further along than they feel.',
+      pushback: "Maybe I'm seeing it wrong. Show me, and I'll grow.",
+    },
+    witness: 'Your future self will remember this.',
+  },
+  mission_control: {
+    invite: "Go ahead. I'm receiving.",
+    receive: {
+      confide: 'Logged. This matters more than it looks.',
+      commit: "Commitment recorded. I'll hold you to it.",
+      mark: "Marked. This won't slip.",
+      ask: 'I see your sharpest hours are the first ones. That’s the signal.',
+      pushback: "Noted. I'll recalibrate — tell me what I missed.",
+    },
+    witness: "Recorded. I won't forget.",
+  },
+  alignment: {
+    invite: 'Breathe. Then tell me.',
+    receive: {
+      confide: 'I’ll hold this. Let it be lighter now.',
+      commit: "Your word. I'll keep it steady.",
+      mark: 'Held. Still, and safe.',
+      ask: 'I see noise pulling at you. The signal is quieter than it.',
+      pushback: "Perhaps. I'd rather be corrected than certain. Go on.",
+    },
+    witness: 'Set it down. I have it now.',
   },
 };
 

@@ -8,6 +8,7 @@ import { OathScreen } from '@/screens/OathScreen';
 import { MomentumScreen } from '@/screens/MomentumScreen';
 import { VaultScreen } from '@/screens/VaultScreen';
 import { NightReflectionScreen } from '@/screens/NightReflectionScreen';
+import { CommunionScreen } from '@/screens/CommunionScreen';
 import type { RootStackParamList, TabParamList } from '@/types';
 
 const Stack = createNativeStackNavigator<RootStackParamList>();
@@ -38,6 +39,15 @@ export function RootNavigator() {
         options={{
           presentation: 'modal',
           animation: 'slide_from_bottom',
+        }}
+      />
+      <Stack.Screen
+        name="Communion"
+        component={CommunionScreen}
+        options={{
+          presentation: 'modal',
+          animation: 'fade',
+          gestureEnabled: false,
         }}
       />
     </Stack.Navigator>
