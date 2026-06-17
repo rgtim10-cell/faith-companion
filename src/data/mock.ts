@@ -17,6 +17,16 @@ export const userProfile: UserProfile = {
   tagline: 'Disciplined. Deliberate. Becoming.',
 };
 
+export const alignmentScore = 87;
+export const momentumScore = 82;
+
+export const oathSuggestion = {
+  missionId: 'm1',
+  title: 'Start with Morning deep work.',
+  reasoning: "Your focus peaks in the first 90 minutes. Completing this first raises your probability of a full mission day.",
+  completionProbability: 83,
+};
+
 export const missions: Mission[] = [
   {
     id: 'm1',
@@ -147,22 +157,22 @@ export const journalEntries: JournalEntry[] = [
 export const aiInsights: Record<string, AIInsightData> = {
   Today: {
     screen: 'Today',
-    text: 'Your highest momentum occurs before 9 AM. This window is open.',
+    text: 'Your highest momentum occurs when you complete your first mission before 9 AM. That window is open right now.',
   },
   Missions: {
     screen: 'Missions',
-    text: 'Start with Morning deep work. Your focus peaks at this hour.',
+    text: 'Front-load your day. Your completion rate drops 34% after 2 PM. Start with what requires the most from you.',
   },
   Oath: {
     screen: 'Oath',
-    text: "You've reaffirmed this oath 47 days in a row. It's no longer a goal. It's who you are.",
+    text: "You've reaffirmed this oath 47 days in a row. It's no longer a goal — it's who you are.",
   },
   Momentum: {
     screen: 'Momentum',
-    text: 'Consistency rises 22% in weeks when you complete the morning mission first.',
+    text: 'Your momentum peaks on Tuesdays and Wednesdays. Protect those days — they set the tone for the rest of the week.',
   },
   Vault: {
     screen: 'Vault',
-    text: 'Your most emotionally resonant entries correlate with your highest momentum weeks.',
+    text: 'Your most emotionally resonant entries align with your highest momentum weeks. What you feel, you perform.',
   },
 };
