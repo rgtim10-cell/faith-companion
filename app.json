@@ -19,9 +19,6 @@
         "backgroundColor": "#04050A"
       }
     },
-    "plugins": [
-      "expo-blur",
-      "expo-haptics"
-    ]
+    "plugins": []
   }
 }
