@@ -6,6 +6,7 @@ import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { StatusBar } from 'expo-status-bar';
 import { RealmProvider } from '@/context/RealmContext';
 import { CovenantProvider } from '@/context/CovenantContext';
+import { DailyProvider } from '@/context/DailyContext';
 import { RootNavigator } from '@/navigation/RootNavigator';
 
 const navTheme = {
@@ -40,10 +41,12 @@ export default function App() {
     <SafeAreaProvider>
       <RealmProvider>
         <CovenantProvider>
-          <NavigationContainer theme={navTheme}>
-            <StatusBar style="light" />
-            <RootNavigator />
-          </NavigationContainer>
+          <DailyProvider>
+            <NavigationContainer theme={navTheme}>
+              <StatusBar style="light" />
+              <RootNavigator />
+            </NavigationContainer>
+          </DailyProvider>
         </CovenantProvider>
       </RealmProvider>
     </SafeAreaProvider>

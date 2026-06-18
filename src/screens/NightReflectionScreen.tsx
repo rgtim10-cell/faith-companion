@@ -1,135 +1,246 @@
-import React, { useState } from 'react';
-import { ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
+import {
+  Animated,
+  Easing,
+  KeyboardAvoidingView,
+  Platform,
+  ScrollView,
+  StyleSheet,
+  Text,
+  TextInput,
+  TouchableOpacity,
+  View,
+} from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useNavigation } from '@react-navigation/native';
 import * as Haptics from 'expo-haptics';
 import { RealmBackground } from '@/components/layout/RealmBackground';
-import { GlassCard } from '@/components/ui/GlassCard';
-import { alignmentScore, userProfile } from '@/data/mock';
-import { useRealm } from '@/context/RealmContext';
+import { useCovenant } from '@/context/CovenantContext';
+import { useDaily } from '@/context/DailyContext';
+import { computeOathState } from '@/engine/oathState';
+import {
+  generateReflectionQuestion,
+  selectClosingLine,
+} from '@/engine/ritualEngine';
 import { colors, radius, spacing, typography } from '@/design/tokens';
 
-const reflectionPrompts = [
-  { id: 'q1', question: 'What went well today?' },
-  { id: 'q2', question: 'What got in your way?' },
-  { id: 'q3', question: 'What will you improve tomorrow?' },
-];
+type Phase = 'question' | 'writing' | 'sealed';
 
 export function NightReflectionScreen() {
-  const { realm } = useRealm();
+  const { covenant, memories, feedback, addMemory } = useCovenant();
+  const { isSealed, sealDay } = useDaily();
   const insets = useSafeAreaInsets();
   const navigation = useNavigation();
-  const [answers, setAnswers] = useState<Record<string, string>>({});
-  const [completed, setCompleted] = useState(false);
 
-  const handleClose = () => navigation.goBack();
+  const oathState = useMemo(
+    () => computeOathState(memories, covenant, feedback),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [memories.length, covenant?.id, feedback.length],
+  );
 
-  const handleComplete = () => {
-    Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-    setCompleted(true);
-    setTimeout(() => handleClose(), 1200);
+  const question = useMemo(
+    () => generateReflectionQuestion(oathState, memories, covenant),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [oathState.key, memories.length, covenant?.id],
+  );
+
+  const [phase, setPhase] = useState<Phase>(isSealed ? 'sealed' : 'question');
+  const [response, setResponse] = useState('');
+  const [closingLine, setClosingLine] = useState('');
+
+  // Entrance fade
+  const fadeAnim = useRef(new Animated.Value(0)).current;
+  const slideAnim = useRef(new Animated.Value(16)).current;
+
+  useEffect(() => {
+    Animated.parallel([
+      Animated.timing(fadeAnim, { toValue: 1, duration: 700, easing: Easing.out(Easing.quad), useNativeDriver: true }),
+      Animated.timing(slideAnim, { toValue: 0, duration: 700, easing: Easing.out(Easing.cubic), useNativeDriver: true }),
+    ]).start();
+  }, [fadeAnim, slideAnim]);
+
+  // Transition animation between phases
+  const transitionPhase = (next: Phase) => {
+    Animated.timing(fadeAnim, { toValue: 0, duration: 250, easing: Easing.in(Easing.quad), useNativeDriver: true }).start(() => {
+      setPhase(next);
+      slideAnim.setValue(12);
+      Animated.parallel([
+        Animated.timing(fadeAnim, { toValue: 1, duration: 500, easing: Easing.out(Easing.quad), useNativeDriver: true }),
+        Animated.timing(slideAnim, { toValue: 0, duration: 500, easing: Easing.out(Easing.cubic), useNativeDriver: true }),
+      ]).start();
+    });
   };
 
-  const answeredCount = Object.values(answers).filter((a) => a.trim().length > 0).length;
-  const allAnswered = answeredCount === reflectionPrompts.length;
+  const handleBeginWriting = () => {
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light).catch(() => {});
+    transitionPhase('writing');
+  };
+
+  const handleSeal = async () => {
+    const trimmed = response.trim();
+    if (!trimmed) return;
+
+    Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success).catch(() => {});
+
+    // Create the reflection memory
+    const reflection = addMemory({
+      type: 'reflection',
+      title: 'Night reflection',
+      content: trimmed,
+      emotionalWeight: 0.65,
+      tags: ['night', 'ritual'],
+      linkedPromiseId: covenant?.id,
+      source: 'night_reflection',
+    });
+
+    // Select OATH's closing line
+    const closing = selectClosingLine(oathState, trimmed);
+    setClosingLine(closing);
+
+    // Find strongest memory of the day (highest emotional weight added today)
+    const todayCutoff = Date.now() - 24 * 60 * 60 * 1000;
+    const todayMemories = memories.filter((m) => m.date > todayCutoff);
+    const strongest = todayMemories.sort((a, b) => b.emotionalWeight - a.emotionalWeight)[0];
+
+    // Seal the day
+    await sealDay({
+      oathStateKey: oathState.key,
+      reflectionId: reflection.id,
+      closingLine: closing,
+      strongestMemoryId: strongest?.id,
+      covenantId: covenant?.id,
+    });
+
+    transitionPhase('sealed');
+  };
+
+  const handleClose = () => {
+    navigation.goBack();
+  };
+
+  const canSeal = response.trim().length > 0;
 
   return (
-    <View style={styles.container}>
+    <KeyboardAvoidingView
+      style={styles.root}
+      behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+    >
       <RealmBackground />
 
+      {/* Header */}
       <View style={[styles.header, { paddingTop: insets.top + spacing.md }]}>
-        <TouchableOpacity onPress={handleClose} style={styles.closeBtn}>
+        <TouchableOpacity onPress={handleClose} style={styles.closeBtn} hitSlop={10}>
           <Text style={styles.closeText}>✕</Text>
         </TouchableOpacity>
-        <Text style={[styles.headerTitle, { color: realm.accentSoft }]}>Night Reflection</Text>
+        <Text style={styles.wordmark}>OATH</Text>
         <View style={styles.headerSpacer} />
       </View>
 
       <ScrollView
         showsVerticalScrollIndicator={false}
+        keyboardShouldPersistTaps="handled"
         contentContainerStyle={[
-          styles.content,
-          { paddingBottom: insets.bottom + spacing.xl },
+          styles.scroll,
+          { paddingBottom: insets.bottom + spacing.xxl },
         ]}
       >
-        {/* OATH opens — direct, personal */}
-        <View style={styles.openingBlock}>
-          <Text style={styles.openingTitle}>Let's review{'\n'}your day.</Text>
-          <Text style={[styles.openingSubtitle, { color: realm.accentSoft }]}>
-            Honesty builds mastery.
-          </Text>
-        </View>
+        <Animated.View
+          style={[styles.content, { opacity: fadeAnim, transform: [{ translateY: slideAnim }] }]}
+        >
+          {/* ── Phase: question ── */}
+          {phase === 'question' && (
+            <View style={styles.questionPhase}>
+              <View style={styles.nightLabel}>
+                <View style={styles.nightDot} />
+                <Text style={styles.nightText}>TONIGHT</Text>
+              </View>
 
-        {/* Reflection prompts */}
-        <View style={styles.promptsList}>
-          {reflectionPrompts.map((prompt, i) => {
-            const answered = answers[prompt.id]?.trim().length > 0;
-            return (
-              <GlassCard key={prompt.id} padding="lg" style={styles.promptCard}>
-                <View style={styles.promptHeader}>
-                  <Text style={[styles.promptQuestion, { color: colors.text }]}>{prompt.question}</Text>
-                  {answered && (
-                    <View style={[styles.checkMark, { borderColor: realm.accent + '55', backgroundColor: realm.accentMuted }]}>
-                      <Text style={[styles.checkText, { color: realm.accent }]}>✓</Text>
-                    </View>
-                  )}
-                </View>
+              <Text style={styles.questionText}>{question}</Text>
+
+              <Text style={styles.oathAttrib}>— OATH</Text>
+
+              <TouchableOpacity
+                onPress={handleBeginWriting}
+                style={styles.beginBtn}
+                activeOpacity={0.8}
+              >
+                <Text style={styles.beginBtnText}>I'm ready</Text>
+              </TouchableOpacity>
+            </View>
+          )}
+
+          {/* ── Phase: writing ── */}
+          {phase === 'writing' && (
+            <View style={styles.writingPhase}>
+              <Text style={styles.questionTextSmall}>{question}</Text>
+              <Text style={styles.oathAttribSmall}>— OATH</Text>
+
+              <View style={styles.inputContainer}>
                 <TextInput
-                  value={answers[prompt.id] ?? ''}
-                  onChangeText={(text) => setAnswers((prev) => ({ ...prev, [prompt.id]: text }))}
-                  placeholder={i === 0 ? 'What moved today...' : i === 1 ? 'What got in the way...' : 'What tomorrow needs...'}
+                  value={response}
+                  onChangeText={setResponse}
+                  placeholder="Tell OATH what happened..."
                   placeholderTextColor={colors.textSubtle}
                   multiline
-                  style={styles.answerInput}
+                  autoFocus
+                  style={styles.input}
                   textAlignVertical="top"
                 />
-              </GlassCard>
-            );
-          })}
-        </View>
+                {response.trim().length > 0 && (
+                  <Text style={styles.listeningLabel}>OATH is listening.</Text>
+                )}
+              </View>
 
-        {/* OATH summary — appears when all answered */}
-        {allAnswered && (
-          <GlassCard padding="lg" style={[styles.summaryCard, { borderColor: realm.accent + '44' }]}>
-            <View style={styles.summaryHeader}>
-              <View style={[styles.summaryDot, { backgroundColor: realm.accent }]} />
-              <Text style={[styles.summaryLabel, { color: realm.accent }]}>OATH SUMMARY</Text>
+              <TouchableOpacity
+                onPress={handleSeal}
+                style={[
+                  styles.sealBtn,
+                  { opacity: canSeal ? 1 : 0.35 },
+                ]}
+                disabled={!canSeal}
+                activeOpacity={0.8}
+              >
+                <Text style={styles.sealBtnText}>Seal today  →</Text>
+              </TouchableOpacity>
             </View>
-            <Text style={styles.summaryText}>
-              You stayed aligned with your identity {alignmentScore}% of the day.{'\n'}
-              That's a win, {userProfile.firstName}.
-            </Text>
-          </GlassCard>
-        )}
+          )}
 
-        {/* OATH's closing — first person, emotionally resonant */}
-        <View style={styles.closingBlock}>
-          <Text style={styles.closingText}>
-            "{realm.aiTone.split('.')[0]}. You showed up. That is enough."
-          </Text>
-          <Text style={[styles.closingAttrib, { color: realm.accentSoft }]}>— OATH</Text>
-        </View>
+          {/* ── Phase: sealed ── */}
+          {phase === 'sealed' && (
+            <View style={styles.sealedPhase}>
+              <View style={styles.sealedMark}>
+                <Text style={styles.sealedGlyph}>◈</Text>
+              </View>
 
-        {/* Complete */}
-        <TouchableOpacity
-          style={[
-            styles.completeBtn,
-            { backgroundColor: completed ? realm.accentMuted : realm.accent, borderColor: realm.accent + '55' },
-          ]}
-          onPress={handleComplete}
-          activeOpacity={0.85}
-        >
-          <Text style={[styles.completeBtnText, { color: completed ? realm.accentSoft : '#000' }]}>
-            {completed ? '✓ Reflection saved' : 'Complete Reflection  →'}
-          </Text>
-        </TouchableOpacity>
+              <Text style={styles.sealedLabel}>TODAY IS SEALED</Text>
+
+              <Text style={styles.closingLineText}>
+                {closingLine || (isSealed ? "OATH holds today. The record continues." : '')}
+              </Text>
+
+              <Text style={styles.oathAttrib}>— OATH</Text>
+
+              <View style={styles.continuitySeal}>
+                <Text style={styles.continuityText}>The record continues.</Text>
+              </View>
+
+              <TouchableOpacity
+                onPress={handleClose}
+                style={styles.closeDay}
+                activeOpacity={0.8}
+              >
+                <Text style={styles.closeDayText}>OATH will remember this.</Text>
+              </TouchableOpacity>
+            </View>
+          )}
+        </Animated.View>
       </ScrollView>
-    </View>
+    </KeyboardAvoidingView>
   );
 }
 
 const styles = StyleSheet.create({
-  container: {
+  root: {
     flex: 1,
   },
   header: {
@@ -147,115 +258,204 @@ const styles = StyleSheet.create({
   },
   closeText: {
     ...typography.headingSm,
-    color: colors.textSecondary,
+    color: colors.textSubtle,
   },
-  headerTitle: {
-    ...typography.labelLg,
-    letterSpacing: 1.5,
+  wordmark: {
+    fontSize: 11,
+    fontWeight: '600',
+    letterSpacing: 3.5,
+    color: 'rgba(255,255,255,0.22)',
   },
   headerSpacer: {
     width: 32,
   },
-  content: {
+
+  scroll: {
     paddingHorizontal: spacing.lg,
     paddingTop: spacing.xl,
-    gap: spacing.lg,
+    flexGrow: 1,
   },
-  openingBlock: {
-    gap: spacing.xs,
-    marginBottom: spacing.sm,
-  },
-  openingTitle: {
-    fontSize: 36,
-    fontWeight: '700',
-    color: colors.text,
-    letterSpacing: -1.5,
-    lineHeight: 42,
-  },
-  openingSubtitle: {
-    ...typography.bodyLg,
-    fontStyle: 'italic',
-  },
-  promptsList: {
-    gap: spacing.md,
-  },
-  promptCard: {
-    gap: spacing.sm,
-  },
-  promptHeader: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-  },
-  promptQuestion: {
-    ...typography.headingSm,
+  content: {
     flex: 1,
   },
-  checkMark: {
-    width: 22,
-    height: 22,
-    borderRadius: 11,
-    borderWidth: 1,
-    alignItems: 'center',
-    justifyContent: 'center',
-    flexShrink: 0,
+
+  // ── Question phase ─────────────────────────────────────────
+  questionPhase: {
+    flex: 1,
+    paddingTop: spacing.xxl,
+    gap: spacing.xl,
   },
-  checkText: {
-    fontSize: 11,
-    fontWeight: '700',
-  },
-  answerInput: {
-    ...typography.bodyMd,
-    color: colors.text,
-    minHeight: 52,
-    lineHeight: 22,
-  },
-  summaryCard: {
-    gap: spacing.sm,
-    borderWidth: 1,
-  },
-  summaryHeader: {
+  nightLabel: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 6,
+    gap: 7,
   },
-  summaryDot: {
-    width: 6,
-    height: 6,
+  nightDot: {
+    width: 5,
+    height: 5,
     borderRadius: 3,
+    backgroundColor: 'rgba(255,255,255,0.25)',
   },
-  summaryLabel: {
-    ...typography.labelLg,
-    letterSpacing: 1.5,
+  nightText: {
+    fontSize: 10,
+    fontWeight: '600',
+    letterSpacing: 2.5,
+    color: 'rgba(255,255,255,0.25)',
   },
-  summaryText: {
-    ...typography.bodyLg,
+  questionText: {
+    fontSize: 32,
+    fontWeight: '300',
     color: colors.text,
-    lineHeight: 26,
+    lineHeight: 44,
+    letterSpacing: -1,
+    maxWidth: 340,
   },
-  closingBlock: {
-    alignItems: 'center',
-    gap: 4,
-    paddingVertical: spacing.sm,
-  },
-  closingText: {
-    ...typography.bodySm,
-    color: colors.textSecondary,
+  oathAttrib: {
+    fontSize: 13,
+    color: 'rgba(255,255,255,0.28)',
     fontStyle: 'italic',
-    textAlign: 'center',
+    letterSpacing: 0.2,
   },
-  closingAttrib: {
-    ...typography.labelMd,
-  },
-  completeBtn: {
+  beginBtn: {
+    alignSelf: 'flex-start',
+    paddingVertical: 13,
+    paddingHorizontal: spacing.xl,
     borderRadius: radius.lg,
-    paddingVertical: 16,
-    alignItems: 'center',
     borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.15)',
+    backgroundColor: 'rgba(255,255,255,0.04)',
+    marginTop: spacing.lg,
   },
-  completeBtnText: {
-    ...typography.bodyMd,
-    fontWeight: '700',
+  beginBtnText: {
+    fontSize: 15,
+    fontWeight: '400',
+    color: colors.text,
+    letterSpacing: -0.1,
+  },
+
+  // ── Writing phase ──────────────────────────────────────────
+  writingPhase: {
+    flex: 1,
+    gap: spacing.lg,
+  },
+  questionTextSmall: {
+    fontSize: 16,
+    fontWeight: '300',
+    color: 'rgba(255,255,255,0.5)',
+    lineHeight: 24,
+    letterSpacing: -0.3,
+    fontStyle: 'italic',
+  },
+  oathAttribSmall: {
+    fontSize: 11,
+    color: 'rgba(255,255,255,0.2)',
+    fontStyle: 'italic',
+    marginTop: -spacing.sm,
+  },
+  inputContainer: {
+    flex: 1,
+    minHeight: 200,
+    gap: spacing.sm,
+    paddingTop: spacing.md,
+    borderTopWidth: StyleSheet.hairlineWidth,
+    borderTopColor: 'rgba(255,255,255,0.08)',
+  },
+  input: {
+    flex: 1,
+    fontSize: 19,
+    fontWeight: '300',
+    color: colors.text,
+    lineHeight: 30,
+    letterSpacing: -0.3,
+    minHeight: 160,
+  },
+  listeningLabel: {
+    fontSize: 11,
+    color: 'rgba(255,255,255,0.2)',
     letterSpacing: 0.3,
+    fontStyle: 'italic',
+  },
+  sealBtn: {
+    paddingVertical: 15,
+    paddingHorizontal: spacing.xl,
+    borderRadius: radius.lg,
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.18)',
+    backgroundColor: 'rgba(255,255,255,0.06)',
+    alignItems: 'center',
+    marginTop: spacing.md,
+  },
+  sealBtnText: {
+    fontSize: 15,
+    fontWeight: '500',
+    color: colors.text,
+    letterSpacing: 0.1,
+  },
+
+  // ── Sealed phase ───────────────────────────────────────────
+  sealedPhase: {
+    flex: 1,
+    paddingTop: spacing.xxl,
+    gap: spacing.xl,
+    alignItems: 'flex-start',
+  },
+  sealedMark: {
+    width: 44,
+    height: 44,
+    borderRadius: 22,
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.12)',
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: 'rgba(255,255,255,0.03)',
+  },
+  sealedGlyph: {
+    fontSize: 18,
+    color: 'rgba(255,255,255,0.4)',
+  },
+  sealedLabel: {
+    fontSize: 10,
+    fontWeight: '600',
+    letterSpacing: 2.5,
+    color: 'rgba(255,255,255,0.25)',
+  },
+  closingLineText: {
+    fontSize: 26,
+    fontWeight: '300',
+    color: colors.text,
+    lineHeight: 38,
+    letterSpacing: -0.6,
+    maxWidth: 320,
+  },
+  continuitySeal: {
+    paddingVertical: spacing.sm,
+    paddingHorizontal: spacing.md,
+    borderRadius: radius.md,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: 'rgba(255,255,255,0.08)',
+    backgroundColor: 'rgba(255,255,255,0.02)',
+  },
+  continuityText: {
+    fontSize: 12,
+    color: 'rgba(255,255,255,0.28)',
+    letterSpacing: 0.3,
+    fontStyle: 'italic',
+  },
+  closeDay: {
+    marginTop: spacing.lg,
+    paddingVertical: 14,
+    paddingHorizontal: spacing.xl,
+    borderRadius: radius.lg,
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.12)',
+    backgroundColor: 'rgba(255,255,255,0.04)',
+    alignSelf: 'stretch',
+    alignItems: 'center',
+  },
+  closeDayText: {
+    fontSize: 15,
+    fontWeight: '400',
+    color: 'rgba(255,255,255,0.65)',
+    letterSpacing: -0.1,
   },
 });

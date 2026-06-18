@@ -16,6 +16,7 @@ import * as Haptics from 'expo-haptics';
 import { Atmosphere } from '@/components/layout/Atmosphere';
 import { RealmBackground } from '@/components/layout/RealmBackground';
 import { useCovenant } from '@/context/CovenantContext';
+import { useDaily } from '@/context/DailyContext';
 import { useRealm } from '@/context/RealmContext';
 import { buildManifestations, findManifestationOfType } from '@/engine/manifestation';
 import { composeExperience, composeMirror } from '@/engine/composer';
@@ -24,6 +25,7 @@ import { EXPERIENCE_GLYPHS, EXPERIENCE_LABELS } from '@/engine/composerTypes';
 import { computeOathState } from '@/engine/oathState';
 import type { OathState } from '@/engine/oathState';
 import { OATH_STATE_COLOR, OATH_STATE_GLYPH } from '@/engine/oathState';
+import { generateMorningReturn } from '@/engine/ritualEngine';
 import type { FeedbackReaction, ManifestationType, MemoryRecord } from '@/data/memoryGraph';
 import {
   manifestationLabel,
@@ -137,6 +139,7 @@ const THEMES: Record<ManifestationType, ManifestationTheme> = {
  */
 export function OathScreen() {
   const { covenant, memories, feedback, addFeedback, addMemory } = useCovenant();
+  const { yesterday, isSealed } = useDaily();
   const { realm } = useRealm();
   const navigation = useNavigation<NativeStackNavigationProp<RootStackParamList>>();
   const insets = useSafeAreaInsets();
@@ -163,6 +166,14 @@ export function OathScreen() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
     [memories.length, covenant?.id, feedback.length],
   );
+
+  // Morning return — surfaces once per session when yesterday's record exists.
+  const morningReturn = useMemo(
+    () => (yesterday ? generateMorningReturn(yesterday, memories) : null),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [yesterday?.id, memories.length],
+  );
+  const [morningDismissed, setMorningDismissed] = useState(false);
 
   const current = allManifestations[Math.min(manifestIdx, allManifestations.length - 1)] ?? null;
   const theme = current ? THEMES[current.type] : THEMES.future_self;
@@ -304,6 +315,11 @@ export function OathScreen() {
     navigation.navigate('Communion');
   };
 
+  const openNightReflection = () => {
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light).catch(() => {});
+    navigation.navigate('NightReflection');
+  };
+
   if (!current) {
     return (
       <View style={styles.root}>
@@ -355,6 +371,14 @@ export function OathScreen() {
             )}
           </Animated.View>
         </View>
+
+        {/* Morning return — references yesterday if meaningful. */}
+        {morningReturn && !morningDismissed && (
+          <MorningReturn
+            line={morningReturn}
+            onDismiss={() => setMorningDismissed(true)}
+          />
+        )}
 
         {/* OATH state — quiet presence indicator. Always visible. */}
         <OathStateIndicator state={oathState} />
@@ -477,6 +501,33 @@ export function OathScreen() {
             <TriggerRow label="I'm drifting" sub="OATH names what it sees honestly" onPress={handleDrift} />
             <TriggerRow label="Challenge me" sub="OATH names the pattern you haven't named" onPress={handleChallenge} />
             <TriggerRow label="Surprise me" sub="OATH picks — no filter, no prediction" onPress={handleSurprise} />
+          </View>
+
+          {/* Daily Ritual — closing the day with OATH */}
+          <View style={styles.ritual}>
+            <View style={styles.ritualHeader}>
+              <View style={[styles.ritualDivider, { backgroundColor: 'rgba(255,255,255,0.04)' }]} />
+              <Text style={styles.ritualLabel}>CLOSE TODAY</Text>
+            </View>
+            {isSealed ? (
+              <View style={styles.ritualSealed}>
+                <Text style={styles.ritualSealedGlyph}>◈</Text>
+                <Text style={styles.ritualSealedText}>Today is sealed. OATH holds it.</Text>
+              </View>
+            ) : (
+              <>
+                <TriggerRow
+                  label="Close today with OATH"
+                  sub="OATH will ask you one question about today"
+                  onPress={openNightReflection}
+                />
+                <TriggerRow
+                  label="Tell OATH what to remember"
+                  sub="Name something from today before it fades"
+                  onPress={openNightReflection}
+                />
+              </>
+            )}
           </View>
         </Animated.View>
       </ScrollView>
@@ -887,6 +938,45 @@ function ExperienceView({
   );
 }
 
+// ── MorningReturn ─────────────────────────────────────────────
+// Shown once per session when yesterday's record exists.
+// One line. Atmospheric. References the day before.
+
+function MorningReturn({ line, onDismiss }: { line: string; onDismiss: () => void }) {
+  return (
+    <TouchableOpacity onPress={onDismiss} style={mrStyles.container} activeOpacity={0.65} hitSlop={4}>
+      <View style={mrStyles.row}>
+        <Text style={mrStyles.glyph}>◇</Text>
+        <Text style={mrStyles.line}>{line}</Text>
+        <Text style={mrStyles.dismiss}>×</Text>
+      </View>
+    </TouchableOpacity>
+  );
+}
+
+const mrStyles = StyleSheet.create({
+  container: {
+    marginBottom: spacing.md,
+    paddingVertical: spacing.sm,
+    paddingHorizontal: spacing.md,
+    borderRadius: radius.md,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: 'rgba(255,255,255,0.08)',
+    backgroundColor: 'rgba(255,255,255,0.03)',
+  },
+  row: { flexDirection: 'row', alignItems: 'center', gap: 8 },
+  glyph: { fontSize: 11, color: 'rgba(255,255,255,0.25)' },
+  line: {
+    flex: 1,
+    fontSize: 12,
+    color: 'rgba(255,255,255,0.38)',
+    fontStyle: 'italic',
+    lineHeight: 18,
+    letterSpacing: -0.05,
+  },
+  dismiss: { fontSize: 13, color: 'rgba(255,255,255,0.15)' },
+});
+
 // ── OathStateIndicator ────────────────────────────────────────
 // A quiet presence element — always visible, never intrusive.
 // OATH's current state before any manifestation appears.
@@ -1137,6 +1227,33 @@ const styles = StyleSheet.create({
   // Triggers
   triggers: { gap: 0 },
   triggerDivider: { height: 1, marginBottom: spacing.md },
+
+  // Daily Ritual
+  ritual: { gap: 0, marginTop: spacing.lg },
+  ritualHeader: { gap: spacing.sm, marginBottom: spacing.xs },
+  ritualDivider: { height: 1 },
+  ritualLabel: {
+    fontSize: 9,
+    fontWeight: '600',
+    letterSpacing: 2.5,
+    color: 'rgba(255,255,255,0.18)',
+  },
+  ritualSealed: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    paddingVertical: spacing.md,
+  },
+  ritualSealedGlyph: {
+    fontSize: 14,
+    color: 'rgba(255,255,255,0.25)',
+  },
+  ritualSealedText: {
+    fontSize: 13,
+    color: 'rgba(255,255,255,0.28)',
+    fontStyle: 'italic',
+    letterSpacing: -0.1,
+  },
   triggerRow: {
     flexDirection: 'row',
     alignItems: 'center',
