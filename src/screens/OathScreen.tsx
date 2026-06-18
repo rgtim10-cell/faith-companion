@@ -18,9 +18,12 @@ import { RealmBackground } from '@/components/layout/RealmBackground';
 import { useCovenant } from '@/context/CovenantContext';
 import { useRealm } from '@/context/RealmContext';
 import { buildManifestations, findManifestationOfType } from '@/engine/manifestation';
-import { composeExperience } from '@/engine/composer';
+import { composeExperience, composeMirror } from '@/engine/composer';
 import type { ComposedExperience, ExperienceType } from '@/engine/composerTypes';
 import { EXPERIENCE_GLYPHS, EXPERIENCE_LABELS } from '@/engine/composerTypes';
+import { computeOathState } from '@/engine/oathState';
+import type { OathState } from '@/engine/oathState';
+import { OATH_STATE_COLOR, OATH_STATE_GLYPH } from '@/engine/oathState';
 import type { FeedbackReaction, ManifestationType, MemoryRecord } from '@/data/memoryGraph';
 import {
   manifestationLabel,
@@ -152,6 +155,14 @@ export function OathScreen() {
   const [feedbackGiven, setFeedbackGiven] = useState<Partial<Record<ManifestationType, FeedbackReaction>>>({});
   const [composedExp, setComposedExp] = useState<ComposedExperience | null>(null);
   const [recentExpTypes, setRecentExpTypes] = useState<ExperienceType[]>([]);
+  const [mirrorStatement, setMirrorStatement] = useState<string | null>(null);
+
+  // OATH's current observational state — computed fresh, shown persistently.
+  const oathState = useMemo(
+    () => computeOathState(memories, covenant, feedback),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [memories.length, covenant?.id, feedback.length],
+  );
 
   const current = allManifestations[Math.min(manifestIdx, allManifestations.length - 1)] ?? null;
   const theme = current ? THEMES[current.type] : THEMES.future_self;
@@ -167,6 +178,7 @@ export function OathScreen() {
       setActiveCardId(null);
       setShowExplanation(false);
       setComposedExp(null);
+      setMirrorStatement(null);
 
       Animated.parallel([
         Animated.timing(fadeAnim, { toValue: 1, duration: 800, easing: Easing.out(Easing.quad), useNativeDriver: true }),
@@ -218,10 +230,22 @@ export function OathScreen() {
   };
 
   // Triggered experiences — OATH responds to how the user is feeling.
+  // The Mirror — "Show me what you see."
+  // OATH uses resonance, its state, and the full composer. Complete freedom.
   const handleShowMe = () => {
-    const next = (Math.min(manifestIdx, allManifestations.length - 1) + 1) % allManifestations.length;
-    switchTo(next);
-    tryCompose('show_me');
+    const exp = composeMirror(oathState, covenant, memories, recentExpTypes);
+    if (exp) {
+      setComposedExp(exp);
+      setMirrorStatement(oathState.statement);
+      setRecentExpTypes((prev) => [exp.type, ...prev].slice(0, 3));
+      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium).catch(() => {});
+      fadeAnim.setValue(0);
+      Animated.timing(fadeAnim, { toValue: 1, duration: 800, easing: Easing.out(Easing.quad), useNativeDriver: true }).start();
+    } else {
+      // Fallback: advance manifestation index
+      const next = (Math.min(manifestIdx, allManifestations.length - 1) + 1) % allManifestations.length;
+      switchTo(next);
+    }
   };
 
   const handleMotivation = () => {
@@ -332,6 +356,9 @@ export function OathScreen() {
           </Animated.View>
         </View>
 
+        {/* OATH state — quiet presence indicator. Always visible. */}
+        <OathStateIndicator state={oathState} />
+
         {/* Opening — what OATH chose to say. The primary experience. */}
         <Animated.View style={[styles.opening, { minHeight: H * 0.36, opacity: fadeAnim }]}>
           <Text
@@ -356,7 +383,8 @@ export function OathScreen() {
             exp={composedExp}
             accent={theme.accent}
             fadeAnim={fadeAnim}
-            onDismiss={() => setComposedExp(null)}
+            mirrorStatement={mirrorStatement}
+            onDismiss={() => { setComposedExp(null); setMirrorStatement(null); }}
             onPromptPress={openCommunion}
             onSaveEvidence={handleSaveAsEvidence}
             savedIds={savedAsEvidence}
@@ -771,6 +799,7 @@ function ExperienceView({
   exp,
   accent,
   fadeAnim,
+  mirrorStatement,
   onDismiss,
   onPromptPress,
   onSaveEvidence,
@@ -779,6 +808,7 @@ function ExperienceView({
   exp: ComposedExperience;
   accent: string;
   fadeAnim: Animated.Value;
+  mirrorStatement: string | null;
   onDismiss: () => void;
   onPromptPress: () => void;
   onSaveEvidence: (r: MemoryRecord) => void;
@@ -795,6 +825,12 @@ function ExperienceView({
         <Text style={[expStyles.badgeGlyph, { color: accent }]}>{glyph}</Text>
         <Text style={[expStyles.badgeLabel, { color: accent }]}>{label}</Text>
       </View>
+
+      {/* Mirror preamble — OATH's state statement before the narrative.
+          Only shown when triggered via "Show me what you see." */}
+      {mirrorStatement && (
+        <Text style={expStyles.preamble}>{mirrorStatement}</Text>
+      )}
 
       {/* Hook — the opening line that must stop the user */}
       <Text style={expStyles.hook}>{exp.hook}</Text>
@@ -851,6 +887,33 @@ function ExperienceView({
   );
 }
 
+// ── OathStateIndicator ────────────────────────────────────────
+// A quiet presence element — always visible, never intrusive.
+// OATH's current state before any manifestation appears.
+
+function OathStateIndicator({ state }: { state: OathState }) {
+  const color = OATH_STATE_COLOR[state.key];
+  const glyph = OATH_STATE_GLYPH[state.key];
+
+  return (
+    <View style={stateStyles.container}>
+      <View style={stateStyles.row}>
+        <Text style={[stateStyles.glyph, { color }]}>{glyph}</Text>
+        <Text style={[stateStyles.key, { color }]}>{state.key.toUpperCase()}</Text>
+      </View>
+      <Text style={stateStyles.statement}>{state.statement}</Text>
+    </View>
+  );
+}
+
+const stateStyles = StyleSheet.create({
+  container: { gap: 3, marginBottom: spacing.md },
+  row: { flexDirection: 'row', alignItems: 'center', gap: 5 },
+  glyph: { fontSize: 11 },
+  key: { fontSize: 9, fontWeight: '700', letterSpacing: 2.2 },
+  statement: { fontSize: 12, color: 'rgba(255,255,255,0.28)', lineHeight: 17, letterSpacing: -0.05, fontStyle: 'italic' },
+});
+
 const expStyles = StyleSheet.create({
   container: { gap: spacing.lg },
   badge: {
@@ -866,6 +929,13 @@ const expStyles = StyleSheet.create({
   },
   badgeGlyph: { fontSize: 12 },
   badgeLabel: { fontSize: 10, fontWeight: '600', letterSpacing: 1.8 },
+  preamble: {
+    fontSize: 13,
+    color: 'rgba(255,255,255,0.35)',
+    fontStyle: 'italic',
+    lineHeight: 19,
+    letterSpacing: -0.1,
+  },
   hook: {
     fontSize: 28,
     fontWeight: '400',

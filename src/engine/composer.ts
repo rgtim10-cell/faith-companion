@@ -1,6 +1,9 @@
 import type { Covenant, MemoryRecord } from '@/data/memoryGraph';
 import type { ComposedExperience, ExperienceTrigger, ExperienceType } from './composerTypes';
 import { TRIGGER_PRIORITY } from './composerTypes';
+import type { OathState } from './oathState';
+import { detectResonance } from './resonanceEngine';
+import type { ResonanceGroup } from './resonanceEngine';
 
 const DAY = 24 * 60 * 60 * 1000;
 
@@ -265,6 +268,92 @@ function buildSurpriseMe(
   }
 
   return null;
+}
+
+// ── Resonance experience ───────────────────────────────────────
+// Built from a ResonanceGroup — OATH surfaces what it has noticed echoing.
+
+const RESONANCE_VOICE: Record<ResonanceGroup['kind'], { hook: string; pivot: string }> = {
+  fear: {
+    hook: 'OATH has seen this fear before.',
+    pivot: 'The same wall. Different clothes. OATH recognizes it now.',
+  },
+  breakthrough: {
+    hook: 'OATH noticed something echoing.',
+    pivot: 'You break through the same way every time. That is not luck — that is method.',
+  },
+  struggle: {
+    hook: 'This keeps coming back.',
+    pivot: 'There is something here that still wants your attention. OATH is pointing at it.',
+  },
+  truth: {
+    hook: 'You have known this for a long time.',
+    pivot: 'OATH found the same realization written twice. The first time was not enough.',
+  },
+  identity: {
+    hook: 'OATH found an echo of who you are.',
+    pivot: 'Some things keep surfacing because they are the truest things.',
+  },
+  pattern: {
+    hook: 'OATH found an echo.',
+    pivot: 'This is not the first time. It will not be the last.',
+  },
+};
+
+function buildResonanceExperience(group: ResonanceGroup): ComposedExperience {
+  const oldest = group.memories[0];
+  const newest = group.memories[group.memories.length - 1];
+  const voice = RESONANCE_VOICE[group.kind];
+
+  return {
+    id: `exp_resonance_${Date.now()}`,
+    type: 'surprise_me',
+    trigger: 'show_me',
+    hook: voice.hook,
+    body: `${group.spanDays} days apart:\n\n"${excerpt(oldest.content)}"\n\n"${excerpt(newest.content)}"`,
+    pivot: voice.pivot,
+    records: group.memories,
+    prompts: ['I see it', "I don't see the connection", 'What should I do with this?'],
+    composedAt: Date.now(),
+  };
+}
+
+// State → trigger mapping for Mirror composition.
+const STATE_TO_TRIGGER: Record<OathState['key'], ExperienceTrigger> = {
+  watching:    'show_me',
+  curious:     'show_me',
+  concerned:   'drift',
+  encouraged:  'motivation',
+  proud:       'motivation',
+  challenging: 'challenge',
+};
+
+/**
+ * The Mirror — "Show me what you see."
+ *
+ * OATH has complete freedom. It uses resonance, its current state,
+ * and the full composer to decide what matters most right now.
+ * The result should occasionally surprise the user.
+ */
+export function composeMirror(
+  oathState: OathState,
+  covenant: Covenant | null,
+  memories: MemoryRecord[],
+  recentTypes: ExperienceType[],
+): ComposedExperience | null {
+  // 1. Resonance first — this is the Mirror's unique signal.
+  //    The scoring system and composer don't detect echoes; the Mirror does.
+  const resonances = detectResonance(memories);
+  const strongResonance = resonances.find((r) => r.strength >= 0.5);
+  if (strongResonance) return buildResonanceExperience(strongResonance);
+
+  // 2. State-driven — OATH's current perspective shapes what it shows.
+  const stateTrigger = STATE_TO_TRIGGER[oathState.key];
+  const stateExp = composeExperience(covenant, memories, stateTrigger, recentTypes);
+  if (stateExp) return stateExp;
+
+  // 3. Full freedom — if nothing else, any experience will do.
+  return composeExperience(covenant, memories, 'show_me', recentTypes);
 }
 
 // ── Main composer ──────────────────────────────────────────────
