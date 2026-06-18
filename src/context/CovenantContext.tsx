@@ -9,6 +9,7 @@ import React, {
 import type { Covenant, ManifestationFeedback, MemoryRecord, MemoryType, ReinforcementReason } from '@/data/memoryGraph';
 import type { RealmKey } from '@/design/realms';
 import { reinforcementBoost, shouldBeFoundational } from '@/engine/memoryEvolution';
+import type { CuratedContextFeedback } from '@/data/curatedContext';
 
 // Lightweight in-memory store with an AsyncStorage-compatible interface.
 // Swap getItem/setItem for AsyncStorage calls to add cross-session persistence.
@@ -18,9 +19,10 @@ const storage = {
   setItem: async (key: string, value: string): Promise<void> => { _store.set(key, value); },
 };
 
-const COVENANT_KEY = 'oath:covenant';
-const MEMORIES_KEY = 'oath:memories';
-const FEEDBACK_KEY = 'oath:feedback';
+const COVENANT_KEY         = 'oath:covenant';
+const MEMORIES_KEY         = 'oath:memories';
+const FEEDBACK_KEY         = 'oath:feedback';
+const CONTEXT_FEEDBACK_KEY = 'oath:context_feedback';
 
 function buildSeedMemories(covenantId: string): MemoryRecord[] {
   const now = Date.now();
@@ -131,6 +133,8 @@ interface CovenantContextValue {
   }) => MemoryRecord;
   addFeedback: (input: Omit<ManifestationFeedback, 'date'>) => void;
   reinforceMemory: (id: string, reason: ReinforcementReason) => void;
+  contextFeedback: CuratedContextFeedback[];
+  addContextFeedback: (input: Omit<CuratedContextFeedback, 'date'>) => void;
 }
 
 const CovenantContext = createContext<CovenantContextValue | null>(null);
@@ -139,19 +143,22 @@ export function CovenantProvider({ children }: { children: React.ReactNode }) {
   const [covenant, setCovenant] = useState<Covenant | null>(null);
   const [memories, setMemories] = useState<MemoryRecord[]>([]);
   const [feedback, setFeedback] = useState<ManifestationFeedback[]>([]);
+  const [contextFeedback, setContextFeedback] = useState<CuratedContextFeedback[]>([]);
   const [isLoading, setIsLoading] = useState(true);
 
   useEffect(() => {
     async function load() {
       try {
-        const [covenantRaw, memoriesRaw, feedbackRaw] = await Promise.all([
+        const [covenantRaw, memoriesRaw, feedbackRaw, ctxFbRaw] = await Promise.all([
           storage.getItem(COVENANT_KEY),
           storage.getItem(MEMORIES_KEY),
           storage.getItem(FEEDBACK_KEY),
+          storage.getItem(CONTEXT_FEEDBACK_KEY),
         ]);
         if (covenantRaw) setCovenant(JSON.parse(covenantRaw) as Covenant);
         if (memoriesRaw) setMemories(JSON.parse(memoriesRaw) as MemoryRecord[]);
         if (feedbackRaw) setFeedback(JSON.parse(feedbackRaw) as ManifestationFeedback[]);
+        if (ctxFbRaw) setContextFeedback(JSON.parse(ctxFbRaw) as CuratedContextFeedback[]);
       } finally {
         setIsLoading(false);
       }
@@ -217,6 +224,15 @@ export function CovenantProvider({ children }: { children: React.ReactNode }) {
     });
   }, []);
 
+  const addContextFeedback = useCallback((input: Omit<CuratedContextFeedback, 'date'>) => {
+    const f: CuratedContextFeedback = { ...input, date: Date.now() };
+    setContextFeedback((prev) => {
+      const next = [f, ...prev];
+      storage.setItem(CONTEXT_FEEDBACK_KEY, JSON.stringify(next)).catch(() => {});
+      return next;
+    });
+  }, []);
+
   const reinforceMemory = useCallback((id: string, reason: ReinforcementReason) => {
     setMemories((prev) => {
       const idx = prev.findIndex((m) => m.id === id);
@@ -235,8 +251,8 @@ export function CovenantProvider({ children }: { children: React.ReactNode }) {
   }, []);
 
   const value = useMemo(
-    () => ({ covenant, memories, feedback, isLoading, createCovenant, addMemory, addFeedback, reinforceMemory }),
-    [covenant, memories, feedback, isLoading, createCovenant, addMemory, addFeedback, reinforceMemory],
+    () => ({ covenant, memories, feedback, isLoading, createCovenant, addMemory, addFeedback, reinforceMemory, contextFeedback, addContextFeedback }),
+    [covenant, memories, feedback, isLoading, createCovenant, addMemory, addFeedback, reinforceMemory, contextFeedback, addContextFeedback],
   );
 
   return <CovenantContext.Provider value={value}>{children}</CovenantContext.Provider>;

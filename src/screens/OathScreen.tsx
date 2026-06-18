@@ -32,6 +32,10 @@ import { detectTheaterExperience } from '@/engine/theaterEngine';
 import { getFirstWeekLine } from '@/engine/oathVoice';
 import { useIntervention } from '@/context/InterventionContext';
 import type { InterventionType } from '@/engine/interventionEngine';
+import { selectContext } from '@/engine/contextSelectionEngine';
+import type { SelectedContext } from '@/engine/contextSelectionEngine';
+import { CONTENT_TYPE_GLYPH, CONTENT_TYPE_LABEL } from '@/data/curatedContext';
+import type { ContextFeedbackReaction } from '@/data/curatedContext';
 import type { FeedbackReaction, ManifestationType, MemoryRecord } from '@/data/memoryGraph';
 import {
   manifestationLabel,
@@ -144,7 +148,7 @@ const THEMES: Record<ManifestationType, ManifestationTheme> = {
  * is askable. OATH speaks first; you respond or move on.
  */
 export function OathScreen() {
-  const { covenant, memories, feedback, addFeedback, addMemory, reinforceMemory, isLoading } = useCovenant();
+  const { covenant, memories, feedback, addFeedback, addMemory, reinforceMemory, isLoading, contextFeedback, addContextFeedback } = useCovenant();
   const { yesterday, isSealed } = useDaily();
   const { canPresent, shownTypes, presentExperience } = useTheater();
   const { bannerVisible, pendingIntervention, viewIntervention, dismissIntervention, deferIntervention } = useIntervention();
@@ -167,6 +171,8 @@ export function OathScreen() {
   const [composedExp, setComposedExp] = useState<ComposedExperience | null>(null);
   const [recentExpTypes, setRecentExpTypes] = useState<ExperienceType[]>([]);
   const [mirrorStatement, setMirrorStatement] = useState<string | null>(null);
+  const [contextFeedbackGiven, setContextFeedbackGiven] = useState<ContextFeedbackReaction | null>(null);
+  const [contextDismissed, setContextDismissed] = useState(false);
 
   // OATH's current observational state — computed fresh, shown persistently.
   const oathState = useMemo(
@@ -180,6 +186,16 @@ export function OathScreen() {
     ? Math.floor((Date.now() - covenant.createdAt) / (24 * 60 * 60 * 1000))
     : null;
   const firstWeekLine = covenantAgeDays !== null ? getFirstWeekLine(covenantAgeDays) : null;
+
+  // Curated context — selected for the Learning manifestation only.
+  // External content supports the user's story; it never replaces it.
+  // Uses allManifestations+manifestIdx rather than current to avoid forward-reference.
+  const selectedContext = useMemo(() => {
+    const manifestType = allManifestations[Math.min(manifestIdx, allManifestations.length - 1)]?.type;
+    if (manifestType !== 'learning') return null;
+    return selectContext(oathState, 'learning', memories, covenant, contextFeedback);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [allManifestations, manifestIdx, oathState.key, memories.length, covenant?.id, contextFeedback.length]);
 
   // Morning return — surfaces once per session when yesterday's record exists.
   const morningReturn = useMemo(
@@ -219,6 +235,8 @@ export function OathScreen() {
       setShowExplanation(false);
       setComposedExp(null);
       setMirrorStatement(null);
+      setContextFeedbackGiven(null);
+      setContextDismissed(false);
 
       Animated.parallel([
         Animated.timing(fadeAnim, { toValue: 1, duration: 800, easing: Easing.out(Easing.quad), useNativeDriver: true }),
@@ -253,6 +271,8 @@ export function OathScreen() {
   const switchTo = (idx: number) => {
     setActiveCardId(null);
     setShowExplanation(false);
+    setContextFeedbackGiven(null);
+    setContextDismissed(false);
 
     Animated.timing(fadeAnim, { toValue: 0, duration: 220, easing: Easing.in(Easing.quad), useNativeDriver: true }).start(() => {
       setManifestIdx(idx);
@@ -499,6 +519,27 @@ export function OathScreen() {
             </View>
           )}
 
+          {/* Curated context — only for Learning manifestation, after personal evidence */}
+          {selectedContext && !contextDismissed && !composedExp && (
+            <CuratedContextCard
+              ctx={selectedContext}
+              accent={theme.accent}
+              feedbackGiven={contextFeedbackGiven}
+              onSave={() => {
+                addContextFeedback({ itemId: selectedContext.item.id, reaction: 'saved' });
+                setContextFeedbackGiven('saved');
+                Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success).catch(() => {});
+              }}
+              onNotRelevant={() => {
+                addContextFeedback({ itemId: selectedContext.item.id, reaction: 'not_relevant' });
+                setContextFeedbackGiven('not_relevant');
+                Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light).catch(() => {});
+              }}
+              onShowEvidenceFirst={() => setContextDismissed(true)}
+              onConnectCovenant={openCommunion}
+            />
+          )}
+
           {/* Why This Matters — connects this manifestation to the covenant */}
           <WhyThisMatters
             type={current.type}
@@ -729,6 +770,173 @@ const wtmStyles = StyleSheet.create({
   },
   label: { fontSize: 10, fontWeight: '600', letterSpacing: 1.8 },
   text: { fontSize: 14, color: 'rgba(255,255,255,0.55)', lineHeight: 21, letterSpacing: -0.1 },
+});
+
+// ── CuratedContextCard ────────────────────────────────────────
+// External context — appears only in the Learning manifestation,
+// only after personal evidence is already showing.
+// One item. Specific. Earned.
+
+function CuratedContextCard({
+  ctx,
+  accent,
+  feedbackGiven,
+  onSave,
+  onNotRelevant,
+  onShowEvidenceFirst,
+  onConnectCovenant,
+}: {
+  ctx: SelectedContext;
+  accent: string;
+  feedbackGiven: ContextFeedbackReaction | null;
+  onSave: () => void;
+  onNotRelevant: () => void;
+  onShowEvidenceFirst: () => void;
+  onConnectCovenant: () => void;
+}) {
+  const { item, oathExplanation } = ctx;
+  const glyph = CONTENT_TYPE_GLYPH[item.type];
+  const typeLabel = CONTENT_TYPE_LABEL[item.type];
+
+  return (
+    <View style={ccStyles.container}>
+      <View style={[ccStyles.divider, { backgroundColor: accent + '20' }]} />
+
+      {/* Type badge */}
+      <View style={ccStyles.badge}>
+        <Text style={[ccStyles.badgeGlyph, { color: accent }]}>{glyph}</Text>
+        <Text style={[ccStyles.badgeLabel, { color: accent }]}>{typeLabel.toUpperCase()}</Text>
+        {item.isMock && (
+          <Text style={ccStyles.mockTag}>MOCK</Text>
+        )}
+      </View>
+
+      {/* Title + source */}
+      <Text style={ccStyles.title}>{item.title}</Text>
+      <Text style={ccStyles.source}>{item.sourceName}</Text>
+
+      {/* Summary */}
+      <Text style={ccStyles.summary}>{item.summary}</Text>
+
+      {/* OATH explanation — why it chose this */}
+      <View style={[ccStyles.explanation, { borderLeftColor: accent + '35' }]}>
+        <Text style={[ccStyles.explanationLabel, { color: accent }]}>OATH CHOSE THIS BECAUSE</Text>
+        <Text style={ccStyles.explanationText}>{oathExplanation}</Text>
+      </View>
+
+      {/* Feedback state */}
+      {feedbackGiven ? (
+        <Text style={[ccStyles.feedbackConfirm, { color: accent }]}>
+          {feedbackGiven === 'saved' ? '◆ Saved. OATH will remember.' : '○ Noted. OATH will adjust.'}
+        </Text>
+      ) : (
+        <View style={ccStyles.actions}>
+          <TouchableOpacity
+            onPress={onSave}
+            style={[ccStyles.actionBtn, { borderColor: '#34D399' + '35', backgroundColor: '#34D399' + '0C' }]}
+            activeOpacity={0.75}
+          >
+            <Text style={[ccStyles.actionText, { color: '#34D399' }]}>Save this</Text>
+          </TouchableOpacity>
+          <TouchableOpacity
+            onPress={onNotRelevant}
+            style={[ccStyles.actionBtn, { borderColor: 'rgba(255,255,255,0.08)', backgroundColor: 'transparent' }]}
+            activeOpacity={0.75}
+          >
+            <Text style={ccStyles.actionTextMuted}>Not relevant</Text>
+          </TouchableOpacity>
+          <TouchableOpacity
+            onPress={onConnectCovenant}
+            style={[ccStyles.actionBtn, { borderColor: accent + '30', backgroundColor: accent + '0A' }]}
+            activeOpacity={0.75}
+          >
+            <Text style={[ccStyles.actionText, { color: accent }]}>How does this connect?</Text>
+          </TouchableOpacity>
+          <TouchableOpacity onPress={onShowEvidenceFirst} hitSlop={8} activeOpacity={0.6}>
+            <Text style={ccStyles.showEvidenceText}>Show evidence first →</Text>
+          </TouchableOpacity>
+        </View>
+      )}
+    </View>
+  );
+}
+
+const ccStyles = StyleSheet.create({
+  container: { gap: spacing.md },
+  divider:   { height: 1, marginBottom: spacing.xs },
+  badge: { flexDirection: 'row', alignItems: 'center', gap: 5 },
+  badgeGlyph: { fontSize: 13 },
+  badgeLabel: { fontSize: 10, fontWeight: '600', letterSpacing: 1.6 },
+  mockTag: {
+    fontSize: 8,
+    fontWeight: '700',
+    letterSpacing: 1,
+    color: 'rgba(255,255,255,0.18)',
+    backgroundColor: 'rgba(255,255,255,0.06)',
+    paddingHorizontal: 5,
+    paddingVertical: 2,
+    borderRadius: 3,
+    marginLeft: 4,
+  },
+  title: {
+    fontSize: 18,
+    fontWeight: '500',
+    color: colors.text,
+    lineHeight: 26,
+    letterSpacing: -0.4,
+  },
+  source: {
+    fontSize: 11,
+    color: 'rgba(255,255,255,0.28)',
+    letterSpacing: 0.3,
+    marginTop: -2,
+  },
+  summary: {
+    fontSize: 14,
+    color: 'rgba(255,255,255,0.55)',
+    lineHeight: 22,
+    letterSpacing: -0.1,
+    fontStyle: 'italic',
+  },
+  explanation: {
+    borderLeftWidth: 2,
+    paddingLeft: 12,
+    gap: 5,
+    paddingVertical: 2,
+  },
+  explanationLabel: {
+    fontSize: 9,
+    fontWeight: '700',
+    letterSpacing: 1.8,
+  },
+  explanationText: {
+    fontSize: 13,
+    color: 'rgba(255,255,255,0.45)',
+    lineHeight: 20,
+    letterSpacing: -0.05,
+  },
+  actions: { gap: spacing.xs, flexWrap: 'wrap', flexDirection: 'row', alignItems: 'center' },
+  actionBtn: {
+    paddingVertical: 6,
+    paddingHorizontal: 12,
+    borderRadius: radius.full,
+    borderWidth: 1,
+  },
+  actionText: { fontSize: 12, fontWeight: '500', letterSpacing: 0.1 },
+  actionTextMuted: { fontSize: 12, fontWeight: '500', color: 'rgba(255,255,255,0.25)', letterSpacing: 0.1 },
+  showEvidenceText: {
+    fontSize: 11,
+    color: 'rgba(255,255,255,0.20)',
+    letterSpacing: 0.2,
+    paddingVertical: 6,
+    paddingHorizontal: 2,
+  },
+  feedbackConfirm: {
+    fontSize: 12,
+    fontWeight: '500',
+    letterSpacing: 0.1,
+    paddingTop: spacing.xs,
+  },
 });
 
 // Feedback row — teaches OATH what resonates.
