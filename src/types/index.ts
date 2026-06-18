@@ -59,6 +59,7 @@ export type RootStackParamList = {
   Tabs: undefined;
   NightReflection: undefined;
   Communion: undefined;
+  Theater: undefined;
 };
 
 export type TabParamList = {

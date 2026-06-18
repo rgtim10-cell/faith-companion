@@ -10,6 +10,7 @@ import { VaultScreen } from '@/screens/VaultScreen';
 import { NightReflectionScreen } from '@/screens/NightReflectionScreen';
 import { CommunionScreen } from '@/screens/CommunionScreen';
 import { CovenantScreen } from '@/screens/CovenantScreen';
+import { TheaterScreen } from '@/screens/TheaterScreen';
 import { useCovenant } from '@/context/CovenantContext';
 import type { RootStackParamList, TabParamList } from '@/types';
 
@@ -53,6 +54,16 @@ export function RootNavigator() {
         name="Communion"
         component={CommunionScreen}
         options={{ presentation: 'modal', animation: 'fade', gestureEnabled: false }}
+      />
+      <Stack.Screen
+        name="Theater"
+        component={TheaterScreen}
+        options={{
+          presentation: 'fullScreenModal',
+          animation: 'fade',
+          animationDuration: 900,
+          gestureEnabled: false,
+        }}
       />
     </Stack.Navigator>
   );

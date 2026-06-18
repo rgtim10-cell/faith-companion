@@ -17,6 +17,7 @@ import { Atmosphere } from '@/components/layout/Atmosphere';
 import { RealmBackground } from '@/components/layout/RealmBackground';
 import { useCovenant } from '@/context/CovenantContext';
 import { useDaily } from '@/context/DailyContext';
+import { useTheater } from '@/context/TheaterContext';
 import { useRealm } from '@/context/RealmContext';
 import { buildManifestations, findManifestationOfType } from '@/engine/manifestation';
 import { composeExperience, composeMirror } from '@/engine/composer';
@@ -27,6 +28,7 @@ import { computeOathState } from '@/engine/oathState';
 import type { OathState } from '@/engine/oathState';
 import { OATH_STATE_COLOR, OATH_STATE_GLYPH } from '@/engine/oathState';
 import { generateMorningReturn } from '@/engine/ritualEngine';
+import { detectTheaterExperience } from '@/engine/theaterEngine';
 import type { FeedbackReaction, ManifestationType, MemoryRecord } from '@/data/memoryGraph';
 import {
   manifestationLabel,
@@ -139,8 +141,9 @@ const THEMES: Record<ManifestationType, ManifestationTheme> = {
  * is askable. OATH speaks first; you respond or move on.
  */
 export function OathScreen() {
-  const { covenant, memories, feedback, addFeedback, addMemory, reinforceMemory } = useCovenant();
+  const { covenant, memories, feedback, addFeedback, addMemory, reinforceMemory, isLoading } = useCovenant();
   const { yesterday, isSealed } = useDaily();
+  const { canPresent, shownTypes, presentExperience } = useTheater();
   const { realm } = useRealm();
   const navigation = useNavigation<NativeStackNavigationProp<RootStackParamList>>();
   const insets = useSafeAreaInsets();
@@ -175,6 +178,21 @@ export function OathScreen() {
     [yesterday?.id, memories.length],
   );
   const [morningDismissed, setMorningDismissed] = useState(false);
+
+  // Theater detection — runs once on mount after a brief settle delay.
+  // Only fires when OATH has enough signal and the cooldown allows it.
+  useEffect(() => {
+    if (isLoading || !covenant || memories.length < 3 || !canPresent) return;
+    const timer = setTimeout(() => {
+      const exp = detectTheaterExperience(covenant, memories, shownTypes);
+      if (exp) {
+        presentExperience(exp);
+        navigation.navigate('Theater');
+      }
+    }, 2000);
+    return () => clearTimeout(timer);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []); // intentionally mount-only
 
   const current = allManifestations[Math.min(manifestIdx, allManifestations.length - 1)] ?? null;
   const theme = current ? THEMES[current.type] : THEMES.future_self;
