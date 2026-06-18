@@ -1,6 +1,6 @@
 import type { Covenant, MemoryRecord } from '@/data/memoryGraph';
 
-export type DemoSeedKey = 'new_user' | 'week_1' | 'month_1' | 'month_3';
+export type DemoSeedKey = 'new_user' | 'week_1' | 'month_1' | 'month_3' | 'heavy';
 
 export interface DemoSeed {
   key: DemoSeedKey;
@@ -441,6 +441,153 @@ const month3Memories: MemoryRecord[] = [
   },
 ];
 
+// ── Heavy user ────────────────────────────────────────────────
+// Eighteen months of a life. Hundreds of memories across every theme — the
+// sky a person could get lost in. Generated deterministically so the
+// constellation is identical every run.
+
+const heavyCovenant: Covenant = {
+  id: 'demo_cov_heavy',
+  promise: 'I am becoming the person my word always pointed to.',
+  createdAt: ago(540),
+};
+
+interface ThemeSpec {
+  tags: string[];
+  lines: { type: MemoryRecord['type']; content: string }[];
+}
+
+const HEAVY_THEMES: ThemeSpec[] = [
+  {
+    tags: ['identity', 'becoming'],
+    lines: [
+      { type: 'truth', content: 'I am not who I was. The change is no longer a hope — it is a fact.' },
+      { type: 'reflection', content: 'I caught myself acting like the person I said I wanted to be. No effort. Just me.' },
+      { type: 'breakthrough', content: 'Someone described me using a word I once only aspired to. It landed as true.' },
+      { type: 'truth', content: 'The old self still visits. It no longer runs the house.' },
+    ],
+  },
+  {
+    tags: ['builder', 'proof', 'milestone'],
+    lines: [
+      { type: 'evidence', content: 'Shipped the thing I said I would ship. On time. It is real now.' },
+      { type: 'breakthrough', content: 'Closed the largest deal yet. The number used to be a fantasy.' },
+      { type: 'evidence', content: 'Hired the first person. I am building something bigger than me.' },
+      { type: 'evidence', content: 'A stranger paid for the work. Proof that lives outside my own belief.' },
+    ],
+  },
+  {
+    tags: ['discipline', 'consistency'],
+    lines: [
+      { type: 'breakthrough', content: 'Thirty mornings in a row. The streak stopped being a streak and became a floor.' },
+      { type: 'struggle', content: 'Wanted to skip it. Did it anyway, badly. Badly still counts.' },
+      { type: 'truth', content: 'Discipline is not motivation. It is the decision made once, kept daily.' },
+      { type: 'breakthrough', content: 'The hard thing got quiet. It is just what I do now.' },
+    ],
+  },
+  {
+    tags: ['resilience', 'return'],
+    lines: [
+      { type: 'struggle', content: 'Fell off for a week. The shame was louder than the absence.' },
+      { type: 'truth', content: 'I do not restart. I return. The arc bends, it does not break.' },
+      { type: 'breakthrough', content: 'Came back faster this time. The gap between fall and return keeps shrinking.' },
+      { type: 'struggle', content: 'A hard season. I kept the smallest promise to stay in the game.' },
+    ],
+  },
+  {
+    tags: ['pattern', 'energy'],
+    lines: [
+      { type: 'truth', content: 'My best work is the first ninety minutes. After that I am managing, not making.' },
+      { type: 'pattern', content: '9 PM is where my resolve thins. I built a wall around that hour.' },
+      { type: 'truth', content: 'I confuse fear with a stop sign. It is actually a marker that this matters.' },
+      { type: 'pattern', content: 'When I am quiet for three days, something is wrong before I can name it.' },
+    ],
+  },
+  {
+    tags: ['health', 'body'],
+    lines: [
+      { type: 'evidence', content: 'Ran the distance I once called impossible. The body kept the promise too.' },
+      { type: 'breakthrough', content: 'Slept enough for a full week. Everything downstream got easier.' },
+      { type: 'struggle', content: 'Old habits with food crept back under stress. Noticed. Adjusted.' },
+      { type: 'reflection', content: 'Strength is not vanity. It is the container that holds the rest.' },
+    ],
+  },
+  {
+    tags: ['family', 'connection'],
+    lines: [
+      { type: 'reflection', content: 'Was fully present at dinner. No phone, no exit. They noticed.' },
+      { type: 'breakthrough', content: 'Repaired something old with a hard, honest conversation.' },
+      { type: 'truth', content: 'The work means nothing if I win it alone. I keep relearning this.' },
+      { type: 'evidence', content: 'Showed up for someone when it cost me. That is the kind of man I am.' },
+    ],
+  },
+  {
+    tags: ['faith', 'gratitude'],
+    lines: [
+      { type: 'reflection', content: 'Gave thanks before I asked for anything. The day reorganized around it.' },
+      { type: 'truth', content: 'Surrender is not giving up. It is giving the outcome a wider home.' },
+      { type: 'reflection', content: 'Sat in silence long enough to hear what I have been outrunning.' },
+      { type: 'breakthrough', content: 'Trusted before I had proof. The proof followed.' },
+    ],
+  },
+];
+
+function generateHeavyMemories(covId: string): MemoryRecord[] {
+  const out: MemoryRecord[] = [];
+  out.push({
+    id: 'dh_promise',
+    type: 'promise',
+    title: 'Founding oath',
+    content: heavyCovenant.promise,
+    date: ago(540),
+    emotionalWeight: 1,
+    tags: ['identity', 'commitment', 'becoming'],
+    linkedPromiseId: covId,
+    source: 'covenant',
+    realm: 'presence',
+    isFoundational: true,
+  });
+
+  const sources: MemoryRecord['source'][] = [
+    'communion', 'evidence_upload', 'night_reflection', 'oath_observed',
+  ];
+  // Deterministic LCG for stable variety.
+  let s = 0x2545f491;
+  const rnd = () => {
+    s = (Math.imul(s, 0x9e3779b1) + 0x6d2b79f5) >>> 0;
+    return s / 0xffffffff;
+  };
+
+  let idn = 0;
+  // Walk backward through ~17 months in roughly 3-day steps.
+  for (let day = 535; day >= 1; day -= 3) {
+    const theme = HEAVY_THEMES[Math.floor(rnd() * HEAVY_THEMES.length)];
+    const line = theme.lines[Math.floor(rnd() * theme.lines.length)];
+    const weight = 0.45 + rnd() * 0.5;
+    const anchored = line.type === 'evidence' || line.type === 'breakthrough' || rnd() > 0.6;
+    const refd = rnd() > 0.82 ? Math.floor(rnd() * 5) + 1 : 0;
+    const foundational = weight > 0.9 && anchored && rnd() > 0.7;
+
+    out.push({
+      id: `dh_${idn++}`,
+      type: line.type,
+      title: theme.tags[0],
+      content: line.content,
+      date: ago(day),
+      emotionalWeight: Math.min(1, weight),
+      tags: theme.tags,
+      linkedPromiseId: anchored ? covId : undefined,
+      source: sources[Math.floor(rnd() * sources.length)],
+      realm: 'presence',
+      ...(refd > 0 ? { referenceCount: refd, lastReferencedAt: ago(Math.max(0, day - 5)) } : {}),
+      ...(foundational ? { isFoundational: true } : {}),
+    });
+  }
+  return out;
+}
+
+const heavyMemories = generateHeavyMemories(heavyCovenant.id);
+
 export const DEMO_SEEDS: DemoSeed[] = [
   {
     key: 'new_user',
@@ -473,5 +620,12 @@ export const DEMO_SEEDS: DemoSeed[] = [
     description: '90 days in. Full arc. Intervention and context eligible.',
     covenant: month3Covenant,
     memories: month3Memories,
+  },
+  {
+    key: 'heavy',
+    label: 'Heavy User',
+    description: '18 months in. Hundreds of memories across every theme.',
+    covenant: heavyCovenant,
+    memories: heavyMemories,
   },
 ];
