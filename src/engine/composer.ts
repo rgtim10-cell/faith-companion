@@ -82,12 +82,13 @@ function buildSomethingChanged(
 
   const topStruggle = [...recentStruggles].sort((a, b) => b.emotionalWeight - a.emotionalWeight)[0];
 
-  const bodyLines = [
-    `${recentStruggles.length} struggles in the last 14 days.`,
-    `${recentWins.length} breakthrough${recentWins.length !== 1 ? 's' : ''}.`,
-  ];
+  const bodyLines: string[] = [];
   if (topStruggle) {
-    bodyLines.push(`\n"${excerpt(topStruggle.content)}"`);
+    bodyLines.push(`"${excerpt(topStruggle.content)}"`);
+  }
+  if (recentWins.length > 0) {
+    const topWin = [...recentWins].sort((a, b) => b.emotionalWeight - a.emotionalWeight)[0];
+    bodyLines.push(`And this happened:\n\n"${excerpt(topWin.content)}"`);
   }
 
   return {
@@ -95,7 +96,7 @@ function buildSomethingChanged(
     type: 'something_changed',
     trigger: 'drift',
     hook: 'Something has shifted.',
-    body: bodyLines.join('\n'),
+    body: bodyLines.join('\n\n'),
     pivot: 'What happened?',
     records: recentStruggles.slice(0, 3),
     prompts: ['I know what happened', "I'm not sure", 'OATH is right'],
@@ -115,7 +116,7 @@ function buildPatternICantIgnore(
     .sort((a, b) => b[1] - a[1])[0];
 
   if (!dominant || dominant[1] < 3) return null;
-  const [type, count] = dominant;
+  const type = dominant[0];
 
   const records = memories
     .filter((m) => m.type === type)
@@ -123,14 +124,14 @@ function buildPatternICantIgnore(
     .slice(0, 3);
 
   const verbMap: Record<string, string> = {
-    breakthrough: `break through when you commit. OATH has seen this ${count} times.`,
-    struggle: `face the same wall in different forms. OATH has counted ${count} encounters.`,
-    reflection: `reflect more than you realize. OATH has kept ${count} reflections.`,
-    evidence: `keep generating proof. OATH has ${count} entries in the record.`,
-    truth: `surface realizations quickly. OATH has catalogued ${count}.`,
+    breakthrough: `break through when you commit. OATH has been watching this happen.`,
+    struggle: `face the same wall, every time, in different forms.`,
+    reflection: `go deeper than you realize. OATH has been holding all of it.`,
+    evidence: `keep generating proof. The record is longer than you know.`,
+    truth: `surface realizations before you're ready for them.`,
   };
 
-  const verb = verbMap[type] ?? `return to this pattern. OATH has ${count} instances on record.`;
+  const verb = verbMap[type] ?? `return to this pattern. OATH will not let it pass.`;
   const examples = records.slice(0, 2).map((r) => `"${excerpt(r.content)}"`).join('\n\n');
 
   return {
@@ -360,11 +361,10 @@ function buildEvolvedHighPoint(memories: MemoryRecord[]): ComposedExperience | n
 
   // Find the most-reinforced record that is old enough to be surprising
   const candidate = evolved.find(
-    (m) => m.date < Date.now() - 7 * DAY && (m.referenceCount ?? 0) > 0 && !m.isFoundational,
+    (m) => m.date < Date.now() - 7 * DAY && !m.isFoundational,
   );
   if (!candidate) return null;
 
-  const refs = candidate.referenceCount ?? 0;
   const days = Math.round((Date.now() - candidate.date) / DAY);
   const daysStr = days === 1 ? '1 day ago' : `${days} days ago`;
 
@@ -373,7 +373,7 @@ function buildEvolvedHighPoint(memories: MemoryRecord[]): ComposedExperience | n
     type: 'proof_you_needed',
     trigger: 'show_me',
     hook: 'This keeps gaining weight.',
-    body: `"${excerpt(candidate.content, 140)}"\n\n${daysStr}. OATH has returned to it ${refs} time${refs !== 1 ? 's' : ''}.`,
+    body: `"${excerpt(candidate.content, 140)}"\n\n${daysStr}. OATH keeps coming back to it.`,
     pivot: 'Some things matter more the longer they sit. This is one of them.',
     records: [candidate],
     prompts: ["I know why", "I hadn't noticed", "It keeps gaining weight"],
