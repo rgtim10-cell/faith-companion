@@ -11,6 +11,7 @@ import { NightReflectionScreen } from '@/screens/NightReflectionScreen';
 import { CommunionScreen } from '@/screens/CommunionScreen';
 import { CovenantScreen } from '@/screens/CovenantScreen';
 import { TheaterScreen } from '@/screens/TheaterScreen';
+import { InterventionScreen } from '@/screens/InterventionScreen';
 import { useCovenant } from '@/context/CovenantContext';
 import type { RootStackParamList, TabParamList } from '@/types';
 
@@ -62,6 +63,16 @@ export function RootNavigator() {
           presentation: 'fullScreenModal',
           animation: 'fade',
           animationDuration: 900,
+          gestureEnabled: false,
+        }}
+      />
+      <Stack.Screen
+        name="Intervention"
+        component={InterventionScreen}
+        options={{
+          presentation: 'fullScreenModal',
+          animation: 'fade',
+          animationDuration: 700,
           gestureEnabled: false,
         }}
       />

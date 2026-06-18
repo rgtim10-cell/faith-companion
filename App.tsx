@@ -8,6 +8,7 @@ import { RealmProvider } from '@/context/RealmContext';
 import { CovenantProvider } from '@/context/CovenantContext';
 import { DailyProvider } from '@/context/DailyContext';
 import { TheaterProvider } from '@/context/TheaterContext';
+import { InterventionProvider } from '@/context/InterventionContext';
 import { RootNavigator } from '@/navigation/RootNavigator';
 
 const navTheme = {
@@ -44,10 +45,12 @@ export default function App() {
         <CovenantProvider>
           <DailyProvider>
             <TheaterProvider>
-              <NavigationContainer theme={navTheme}>
-                <StatusBar style="light" />
-                <RootNavigator />
-              </NavigationContainer>
+              <InterventionProvider>
+                <NavigationContainer theme={navTheme}>
+                  <StatusBar style="light" />
+                  <RootNavigator />
+                </NavigationContainer>
+              </InterventionProvider>
             </TheaterProvider>
           </DailyProvider>
         </CovenantProvider>

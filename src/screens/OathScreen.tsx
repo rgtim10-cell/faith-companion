@@ -30,6 +30,8 @@ import { OATH_STATE_COLOR, OATH_STATE_GLYPH } from '@/engine/oathState';
 import { generateMorningReturn } from '@/engine/ritualEngine';
 import { detectTheaterExperience } from '@/engine/theaterEngine';
 import { getFirstWeekLine } from '@/engine/oathVoice';
+import { useIntervention } from '@/context/InterventionContext';
+import type { InterventionType } from '@/engine/interventionEngine';
 import type { FeedbackReaction, ManifestationType, MemoryRecord } from '@/data/memoryGraph';
 import {
   manifestationLabel,
@@ -145,6 +147,7 @@ export function OathScreen() {
   const { covenant, memories, feedback, addFeedback, addMemory, reinforceMemory, isLoading } = useCovenant();
   const { yesterday, isSealed } = useDaily();
   const { canPresent, shownTypes, presentExperience } = useTheater();
+  const { bannerVisible, pendingIntervention, viewIntervention, dismissIntervention, deferIntervention } = useIntervention();
   const { realm } = useRealm();
   const navigation = useNavigation<NativeStackNavigationProp<RootStackParamList>>();
   const insets = useSafeAreaInsets();
@@ -377,10 +380,26 @@ export function OathScreen() {
         pointerEvents="none"
       />
 
+      {/* Intervention banner — appears at the top of the screen when OATH has something to say. */}
+      {bannerVisible && pendingIntervention && (
+        <InterventionBanner
+          onView={() => {
+            viewIntervention();
+            navigation.navigate('Intervention');
+          }}
+          onDefer={deferIntervention}
+          onDismiss={dismissIntervention}
+          insetTop={insets.top}
+        />
+      )}
+
       <ScrollView
         contentContainerStyle={[
           styles.scroll,
-          { paddingTop: insets.top + spacing.md, paddingBottom: insets.bottom + 100 },
+          {
+            paddingTop: insets.top + spacing.md + (bannerVisible && pendingIntervention ? 72 : 0),
+            paddingBottom: insets.bottom + 100,
+          },
         ]}
         showsVerticalScrollIndicator={false}
       >
@@ -1067,6 +1086,83 @@ const mrStyles = StyleSheet.create({
     letterSpacing: -0.05,
   },
   dismiss: { fontSize: 13, color: 'rgba(255,255,255,0.15)' },
+});
+
+// ── InterventionBanner ────────────────────────────────────────
+// Appears when OATH has something to say — rare, earned, specific.
+// Three options: view it now, defer to later, or dismiss entirely.
+// Never a notification. Never an alert. Just OATH, waiting.
+
+const INTERVENTION_ACCENT: Record<InterventionType, string> = {
+  echo:          '#93C5FD',
+  witness:       '#34D399',
+  drift:         '#F97316',
+  turning_point: '#D4A853',
+  anniversary:   '#A78BFA',
+};
+
+function InterventionBanner({
+  onView,
+  onDefer,
+  onDismiss,
+  insetTop,
+}: {
+  onView: () => void;
+  onDefer: () => void;
+  onDismiss: () => void;
+  insetTop: number;
+}) {
+  const { pendingIntervention } = useIntervention();
+  if (!pendingIntervention) return null;
+
+  const accent = INTERVENTION_ACCENT[pendingIntervention.type];
+
+  return (
+    <View style={[ibStyles.container, { top: insetTop + spacing.xs, borderColor: accent + '28', backgroundColor: accent + '0C' }]}>
+      <View style={ibStyles.row}>
+        <Text style={[ibStyles.glyph, { color: accent }]}>○</Text>
+        <Text style={[ibStyles.headline, { color: accent }]}>OATH has been holding something.</Text>
+      </View>
+      <View style={ibStyles.actions}>
+        <TouchableOpacity onPress={onView} style={[ibStyles.actionBtn, { borderColor: accent + '40', backgroundColor: accent + '10' }]} activeOpacity={0.75}>
+          <Text style={[ibStyles.actionPrimary, { color: accent }]}>View now</Text>
+        </TouchableOpacity>
+        <TouchableOpacity onPress={onDefer} style={ibStyles.actionTextBtn} activeOpacity={0.65}>
+          <Text style={ibStyles.actionText}>Later</Text>
+        </TouchableOpacity>
+        <TouchableOpacity onPress={onDismiss} style={ibStyles.actionTextBtn} activeOpacity={0.65}>
+          <Text style={ibStyles.actionText}>Dismiss</Text>
+        </TouchableOpacity>
+      </View>
+    </View>
+  );
+}
+
+const ibStyles = StyleSheet.create({
+  container: {
+    position: 'absolute',
+    left: spacing.lg,
+    right: spacing.lg,
+    zIndex: 20,
+    borderRadius: radius.lg,
+    borderWidth: 1,
+    paddingHorizontal: spacing.md,
+    paddingVertical: 10,
+    gap: 8,
+  },
+  row: { flexDirection: 'row', alignItems: 'center', gap: 7 },
+  glyph: { fontSize: 11 },
+  headline: { fontSize: 13, fontWeight: '500', letterSpacing: -0.1, flex: 1 },
+  actions: { flexDirection: 'row', alignItems: 'center', gap: spacing.md },
+  actionBtn: {
+    paddingVertical: 5,
+    paddingHorizontal: 12,
+    borderRadius: radius.full,
+    borderWidth: 1,
+  },
+  actionPrimary: { fontSize: 12, fontWeight: '600', letterSpacing: 0.1 },
+  actionTextBtn: { paddingVertical: 5, paddingHorizontal: 4 },
+  actionText: { fontSize: 12, color: 'rgba(255,255,255,0.28)', letterSpacing: 0.1 },
 });
 
 // ── OathStateIndicator ────────────────────────────────────────
