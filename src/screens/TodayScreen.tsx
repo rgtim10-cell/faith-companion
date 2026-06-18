@@ -7,6 +7,7 @@ import { Atmosphere } from '@/components/layout/Atmosphere';
 
 // Lazy so the Skia web API binds only after CanvasKit (WASM) has loaded.
 const SkiaOrb = React.lazy(() => import('@/components/ui/SkiaOrb'));
+const MemorySky = React.lazy(() => import('@/components/ui/MemorySky'));
 import { threshold } from '@/data/mock';
 import { useRealm } from '@/context/RealmContext';
 import { useCovenant } from '@/context/CovenantContext';
@@ -156,6 +157,10 @@ export function TodayScreen() {
 
   return (
     <View style={styles.container}>
+      {/* Living sky — all memories as stars behind the presence */}
+      <Suspense fallback={null}>
+        <MemorySky memories={memories} covenant={covenant} skyState="silent" />
+      </Suspense>
       <Atmosphere intensity={intensity} dim={dim} />
 
       {/* The presence — distant, then near */}
@@ -163,7 +168,7 @@ export function TodayScreen() {
         style={[
           styles.orb,
           {
-            top: H * 0.17,
+            top: H * 0.22,
             opacity: approach,
             transform: [
               { scale: approach.interpolate({ inputRange: [0, 1], outputRange: [0.68, 1] }) },
@@ -173,7 +178,7 @@ export function TodayScreen() {
         ]}
       >
         <Suspense fallback={null}>
-          <SkiaOrb size={300} pulseValue={pulse} listening={listening} onPress={onOrbTouch} />
+          <SkiaOrb size={160} pulseValue={pulse} listening={listening} onPress={onOrbTouch} />
         </Suspense>
       </Animated.View>
 

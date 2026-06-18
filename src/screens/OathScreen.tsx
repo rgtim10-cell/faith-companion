@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import React, { Suspense, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   Animated,
   Easing,
@@ -38,6 +38,9 @@ import type { SelectedContext } from '@/engine/contextSelectionEngine';
 import { CONTENT_TYPE_GLYPH, CONTENT_TYPE_LABEL } from '@/data/curatedContext';
 import type { ContextFeedbackReaction } from '@/data/curatedContext';
 import { DEMO_SEEDS } from '@/data/demoSeeds';
+
+// Lazy — Skia WASM must be ready before the canvas renders.
+const MemorySky = React.lazy(() => import('@/components/ui/MemorySky'));
 import type { FeedbackReaction, ManifestationType, MemoryRecord } from '@/data/memoryGraph';
 import {
   manifestationLabel,
@@ -230,6 +233,16 @@ export function OathScreen() {
   const current = allManifestations[Math.min(manifestIdx, allManifestations.length - 1)] ?? null;
   const theme = current ? THEMES[current.type] : THEMES.future_self;
 
+  // Sky highlight — stars brighten for the records OATH is currently referencing.
+  const skyHighlightIds = useMemo(
+    () => (composedExp?.records ?? current?.records ?? []).map((r) => r.id),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [composedExp?.id, current?.type, memories.length],
+  );
+  const skyState = composedExp ? 'remembering'
+    : current?.type === 'chain' || current?.type === 'evidence' ? 'noticing'
+    : 'silent';
+
   // Animation layers
   const fadeAnim = useRef(new Animated.Value(0)).current;
   const bloomAnim = useRef(new Animated.Value(0)).current;
@@ -394,6 +407,9 @@ export function OathScreen() {
     return (
       <View style={styles.root}>
         <RealmBackground />
+        <Suspense fallback={null}>
+          <MemorySky memories={memories} covenant={covenant} skyState="silent" />
+        </Suspense>
         <View style={[styles.emptyState, { paddingTop: insets.top + spacing.xxl }]}>
           <Text style={styles.emptyText}>
             The record is empty. OATH is watching.
@@ -411,6 +427,14 @@ export function OathScreen() {
   return (
     <View style={styles.root}>
       <RealmBackground />
+      <Suspense fallback={null}>
+        <MemorySky
+          memories={memories}
+          covenant={covenant}
+          highlightIds={skyHighlightIds}
+          skyState={skyState}
+        />
+      </Suspense>
       <Atmosphere intensity={intensity} />
 
       {/* Type-specific atmospheric bloom — the space takes on the manifestation's color */}
@@ -542,96 +566,10 @@ export function OathScreen() {
         ) : null}
 
         <Animated.View style={[styles.body, { opacity: fadeAnim, display: composedExp ? 'none' : 'flex' }]}>
-          {/* Supporting records — chain gets a timeline; others get expandable cards */}
+          {/* Floating memory — one significant record from the sky, not a card */}
           {current.records.length > 0 && (
-            <View style={styles.records}>
-              <View style={[styles.recordsDivider, { backgroundColor: theme.accent + '30' }]} />
-              {current.type === 'chain' ? (
-                <ChainTimeline
-                  records={current.records}
-                  accent={theme.accent}
-                />
-              ) : (
-                current.records.map((record) => (
-                  <ExpandableCard
-                    key={record.id}
-                    record={record}
-                    accent={theme.accent}
-                    isActive={activeCardId === record.id}
-                    isSaved={savedAsEvidence.has(record.id)}
-                    onToggle={() => {
-                      setActiveCardId((id) => (id === record.id ? null : record.id));
-                      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light).catch(() => {});
-                    }}
-                    onWhyThis={() => { setShowExplanation((v) => !v); setActiveCardId(null); }}
-                    onConnectCovenant={openCommunion}
-                    onSaveEvidence={() => handleSaveAsEvidence(record)}
-                    onDisagree={openCommunion}
-                  />
-                ))
-              )}
-            </View>
+            <FloatingMemoryQuote records={current.records} accent={theme.accent} />
           )}
-
-          {/* Curated context — only for Learning manifestation, after personal evidence */}
-          {selectedContext && !contextDismissed && !composedExp && (
-            <CuratedContextCard
-              ctx={selectedContext}
-              accent={theme.accent}
-              feedbackGiven={contextFeedbackGiven}
-              onSave={() => {
-                addContextFeedback({ itemId: selectedContext.item.id, reaction: 'saved' });
-                setContextFeedbackGiven('saved');
-                Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success).catch(() => {});
-              }}
-              onNotRelevant={() => {
-                addContextFeedback({ itemId: selectedContext.item.id, reaction: 'not_relevant' });
-                setContextFeedbackGiven('not_relevant');
-                Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light).catch(() => {});
-              }}
-              onShowEvidenceFirst={() => setContextDismissed(true)}
-              onConnectCovenant={openCommunion}
-            />
-          )}
-
-          {/* Why This Matters — connects this manifestation to the covenant */}
-          <WhyThisMatters
-            type={current.type}
-            promise={covenant?.promise ?? null}
-            accent={theme.accent}
-          />
-
-          {/* Why OATH showed this — expands inline */}
-          {showExplanation && (
-            <View style={[styles.explanation, { borderColor: theme.accent + '20', backgroundColor: theme.accent + '08' }]}>
-              <Text style={[styles.explanationLabel, { color: theme.accent }]}>
-                WHY OATH SHOWED YOU THIS
-              </Text>
-              <Text style={styles.explanationText}>{current.explanation}</Text>
-              <TouchableOpacity onPress={() => setShowExplanation(false)} hitSlop={8}>
-                <Text style={[styles.explanationClose, { color: theme.accent }]}>Close ↑</Text>
-              </TouchableOpacity>
-            </View>
-          )}
-
-          {/* Prompt pills */}
-          <View style={styles.prompts}>
-            {current.prompts.map((prompt) => (
-              <PromptPill
-                key={prompt}
-                label={prompt}
-                accent={theme.accent}
-                onPress={() => {
-                  if (prompt.toLowerCase().includes('why')) {
-                    setShowExplanation((v) => !v);
-                    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light).catch(() => {});
-                  } else {
-                    openCommunion();
-                  }
-                }}
-              />
-            ))}
-          </View>
 
           {/* Feedback — teaches OATH what resonates */}
           <FeedbackRow
@@ -640,14 +578,12 @@ export function OathScreen() {
             onReact={handleFeedback}
           />
 
-          {/* Triggers — summoning OATH's perspective */}
+          {/* Invocations — the three ways to summon OATH */}
           <View style={styles.triggers}>
             <View style={[styles.triggerDivider, { backgroundColor: 'rgba(255,255,255,0.06)' }]} />
-            <TriggerRow label="Show me what you see" sub="OATH selects something from your Memory" onPress={handleShowMe} />
-            <TriggerRow label="I need motivation" sub="OATH surfaces your own evidence and proof" onPress={handleMotivation} />
-            <TriggerRow label="I'm drifting" sub="OATH names what it sees honestly" onPress={handleDrift} />
+            <TriggerRow label="Show me what you see" sub="OATH selects from your Memory" onPress={handleShowMe} />
+            <TriggerRow label="I need motivation" sub="OATH surfaces your own evidence" onPress={handleMotivation} />
             <TriggerRow label="Challenge me" sub="OATH names the pattern you haven't named" onPress={handleChallenge} />
-            <TriggerRow label="Surprise me" sub="OATH picks — no filter, no prediction" onPress={handleSurprise} />
           </View>
 
           {/* Daily Ritual — closing the day with OATH */}
@@ -1267,28 +1203,9 @@ function ExperienceView({
         <Text style={[expStyles.pivot, { color: accent }]}>{exp.pivot}</Text>
       </Animated.View>
 
-      {/* Supporting records */}
+      {/* Supporting record — floating, atmospheric, not a card */}
       {exp.records.length > 0 && (
-        <View style={expStyles.records}>
-          <View style={[expStyles.recordsDivider, { backgroundColor: accent + '25' }]} />
-          {exp.records.map((record) => (
-            <ExpandableCard
-              key={record.id}
-              record={record}
-              accent={accent}
-              isActive={activeCardId === record.id}
-              isSaved={savedIds.has(record.id)}
-              onToggle={() => {
-                setActiveCardId((id) => (id === record.id ? null : record.id));
-                Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light).catch(() => {});
-              }}
-              onWhyThis={() => setActiveCardId(null)}
-              onConnectCovenant={onPromptPress}
-              onSaveEvidence={() => onSaveEvidence(record)}
-              onDisagree={onPromptPress}
-            />
-          ))}
-        </View>
+        <FloatingMemoryQuote records={exp.records} accent={accent} />
       )}
 
       {/* Prompts from the experience */}
@@ -1510,6 +1427,54 @@ const expStyles = StyleSheet.create({
     color: colors.textSubtle,
     letterSpacing: 0.1,
   },
+});
+
+// ── FloatingMemoryQuote ───────────────────────────────────────
+// One record from the sky — not a card. No border, no background.
+// The most significant memory surfaces as a quiet, floating quote.
+function FloatingMemoryQuote({ records, accent }: { records: MemoryRecord[]; accent: string }) {
+  const now = Date.now();
+  const sorted = [...records].sort(
+    (a, b) => computeSignificance(b, now) - computeSignificance(a, now),
+  );
+  const top = sorted[0];
+  if (!top) return null;
+
+  const typeColor = memoryTypeColor[top.type];
+  const glyph = memoryTypeGlyph[top.type];
+  const daysAgo = Math.round((Date.now() - top.date) / (24 * 60 * 60 * 1000));
+  const when = daysAgo === 0 ? 'Today' : daysAgo === 1 ? 'Yesterday' : `${daysAgo}d ago`;
+
+  return (
+    <View style={fmqStyles.container}>
+      <View style={fmqStyles.row}>
+        <Text style={[fmqStyles.glyph, { color: typeColor }]}>{glyph}</Text>
+        <Text style={[fmqStyles.when, { color: accent + '60' }]}>{when}</Text>
+      </View>
+      <Text style={[fmqStyles.quote, { color: 'rgba(255,255,255,0.55)' }]} numberOfLines={4}>
+        {top.content}
+      </Text>
+      {records.length > 1 && (
+        <Text style={[fmqStyles.more, { color: accent + '50' }]}>
+          +{records.length - 1} more in the sky
+        </Text>
+      )}
+    </View>
+  );
+}
+
+const fmqStyles = StyleSheet.create({
+  container: { gap: 7, paddingLeft: 2 },
+  row: { flexDirection: 'row', alignItems: 'center', gap: 7 },
+  glyph: { fontSize: 11 },
+  when: { fontSize: 11, letterSpacing: 0.3, fontWeight: '400' },
+  quote: {
+    fontSize: 15,
+    lineHeight: 23,
+    letterSpacing: -0.15,
+    fontStyle: 'italic',
+  },
+  more: { fontSize: 11, letterSpacing: 0.2 },
 });
 
 // ── Styles ────────────────────────────────────────────────────
