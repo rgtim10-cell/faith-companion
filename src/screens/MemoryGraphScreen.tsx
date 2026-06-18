@@ -10,6 +10,7 @@ import {
   memoryTypeLabel,
 } from '@/data/memoryGraph';
 import type { MemoryRecord, MemoryType } from '@/data/memoryGraph';
+import { computeSignificance, significanceLevel, SIGNIFICANCE_LABEL } from '@/engine/memoryEvolution';
 import { colors, radius, spacing, typography } from '@/design/tokens';
 
 const FILTERS: { type: MemoryType | 'all'; label: string }[] = [
@@ -179,12 +180,22 @@ function MemoryRow({ record }: { record: MemoryRecord }) {
         >
           {record.content}
         </Text>
-        {record.emotionalWeight >= 0.8 && (
-          <View style={styles.weightRow}>
-            <View style={[styles.weightDot, { backgroundColor: color }]} />
-            <Text style={[styles.weightLabel, { color }]}>High emotional weight</Text>
-          </View>
-        )}
+        {(() => {
+          const sig = computeSignificance(record);
+          const level = significanceLevel(sig);
+          if (sig < 0.55) return null;
+          const label = record.isFoundational
+            ? 'Foundational'
+            : record.isCarryForward
+            ? 'Carried forward'
+            : SIGNIFICANCE_LABEL[level];
+          return (
+            <View style={styles.weightRow}>
+              <View style={[styles.weightDot, { backgroundColor: color }]} />
+              <Text style={[styles.weightLabel, { color }]}>{label}</Text>
+            </View>
+          );
+        })()}
       </View>
     </TouchableOpacity>
   );

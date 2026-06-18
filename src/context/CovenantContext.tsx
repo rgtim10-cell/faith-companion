@@ -6,8 +6,9 @@ import React, {
   useMemo,
   useState,
 } from 'react';
-import type { Covenant, ManifestationFeedback, MemoryRecord, MemoryType } from '@/data/memoryGraph';
+import type { Covenant, ManifestationFeedback, MemoryRecord, MemoryType, ReinforcementReason } from '@/data/memoryGraph';
 import type { RealmKey } from '@/design/realms';
+import { reinforcementBoost, shouldBeFoundational } from '@/engine/memoryEvolution';
 
 // Lightweight in-memory store with an AsyncStorage-compatible interface.
 // Swap getItem/setItem for AsyncStorage calls to add cross-session persistence.
@@ -129,6 +130,7 @@ interface CovenantContextValue {
     imageUri?: string;
   }) => MemoryRecord;
   addFeedback: (input: Omit<ManifestationFeedback, 'date'>) => void;
+  reinforceMemory: (id: string, reason: ReinforcementReason) => void;
 }
 
 const CovenantContext = createContext<CovenantContextValue | null>(null);
@@ -215,9 +217,26 @@ export function CovenantProvider({ children }: { children: React.ReactNode }) {
     });
   }, []);
 
+  const reinforceMemory = useCallback((id: string, reason: ReinforcementReason) => {
+    setMemories((prev) => {
+      const idx = prev.findIndex((m) => m.id === id);
+      if (idx === -1) return prev;
+      const target = prev[idx];
+      const patch = reinforcementBoost(target, reason);
+      const updated: MemoryRecord = { ...target, ...patch };
+      const withFoundational: MemoryRecord = shouldBeFoundational(updated)
+        ? { ...updated, isFoundational: true }
+        : updated;
+      const next = [...prev];
+      next[idx] = withFoundational;
+      storage.setItem(MEMORIES_KEY, JSON.stringify(next)).catch(() => {});
+      return next;
+    });
+  }, []);
+
   const value = useMemo(
-    () => ({ covenant, memories, feedback, isLoading, createCovenant, addMemory, addFeedback }),
-    [covenant, memories, feedback, isLoading, createCovenant, addMemory, addFeedback],
+    () => ({ covenant, memories, feedback, isLoading, createCovenant, addMemory, addFeedback, reinforceMemory }),
+    [covenant, memories, feedback, isLoading, createCovenant, addMemory, addFeedback, reinforceMemory],
   );
 
   return <CovenantContext.Provider value={value}>{children}</CovenantContext.Provider>;

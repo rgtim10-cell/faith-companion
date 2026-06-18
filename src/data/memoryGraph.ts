@@ -21,6 +21,12 @@ export type ManifestationType =
 
 export type FeedbackReaction = 'resonated' | 'not_relevant' | 'more' | 'disagree';
 
+export type ReinforcementReason =
+  | 'oath_shown'      // OathScreen surfaced this in an experience
+  | 'mirror_selected' // composeMirror chose this record
+  | 'carry_forward'   // NightReflection: user chose to carry this forward
+  | 'user_explicit';  // future: user taps "remember this"
+
 export interface ManifestationFeedback {
   type: ManifestationType;
   reaction: FeedbackReaction;
@@ -33,13 +39,20 @@ export interface MemoryRecord {
   title: string;
   content: string;
   date: number;
-  emotionalWeight: number; // 0–1
+  emotionalWeight: number; // 0–1, base weight — boosted by reinforcement
   tags: string[];
   linkedPromiseId?: string;
   source: 'covenant' | 'communion' | 'evidence_upload' | 'night_reflection' | 'oath_observed';
   realm?: RealmKey;
   oathInterpretation?: string; // what OATH sees this evidence proves
   imageUri?: string;           // 'placeholder' or real URI for photo evidence
+
+  // Evolution fields — optional, absent on legacy records (treated as defaults)
+  referenceCount?: number;      // how many times OATH has surfaced this
+  lastReferencedAt?: number;    // last timestamp referenced (defaults to date)
+  resonanceScore?: number;      // echo strength from resonance detection
+  isFoundational?: boolean;     // never decays — permanent anchor in the record
+  isCarryForward?: boolean;     // user explicitly chose to carry this forward
 }
 
 export interface Covenant {

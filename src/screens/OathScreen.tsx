@@ -20,6 +20,7 @@ import { useDaily } from '@/context/DailyContext';
 import { useRealm } from '@/context/RealmContext';
 import { buildManifestations, findManifestationOfType } from '@/engine/manifestation';
 import { composeExperience, composeMirror } from '@/engine/composer';
+import { computeSignificance, significanceLevel, SIGNIFICANCE_LABEL, SIGNIFICANCE_COLOR } from '@/engine/memoryEvolution';
 import type { ComposedExperience, ExperienceType } from '@/engine/composerTypes';
 import { EXPERIENCE_GLYPHS, EXPERIENCE_LABELS } from '@/engine/composerTypes';
 import { computeOathState } from '@/engine/oathState';
@@ -138,7 +139,7 @@ const THEMES: Record<ManifestationType, ManifestationTheme> = {
  * is askable. OATH speaks first; you respond or move on.
  */
 export function OathScreen() {
-  const { covenant, memories, feedback, addFeedback, addMemory } = useCovenant();
+  const { covenant, memories, feedback, addFeedback, addMemory, reinforceMemory } = useCovenant();
   const { yesterday, isSealed } = useDaily();
   const { realm } = useRealm();
   const navigation = useNavigation<NativeStackNavigationProp<RootStackParamList>>();
@@ -205,12 +206,13 @@ export function OathScreen() {
       if (exp) {
         setComposedExp(exp);
         setRecentExpTypes((prev) => [exp.type, ...prev].slice(0, 3));
+        exp.records.forEach((r) => reinforceMemory(r.id, 'oath_shown'));
         Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium).catch(() => {});
         fadeAnim.setValue(0);
         Animated.timing(fadeAnim, { toValue: 1, duration: 600, easing: Easing.out(Easing.quad), useNativeDriver: true }).start();
       }
     },
-    [covenant, memories, recentExpTypes, fadeAnim],
+    [covenant, memories, recentExpTypes, fadeAnim, reinforceMemory],
   );
 
   const handleFeedback = (reaction: FeedbackReaction) => {
@@ -249,6 +251,7 @@ export function OathScreen() {
       setComposedExp(exp);
       setMirrorStatement(oathState.statement);
       setRecentExpTypes((prev) => [exp.type, ...prev].slice(0, 3));
+      exp.records.forEach((r) => reinforceMemory(r.id, 'mirror_selected'));
       Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium).catch(() => {});
       fadeAnim.setValue(0);
       Animated.timing(fadeAnim, { toValue: 1, duration: 800, easing: Easing.out(Easing.quad), useNativeDriver: true }).start();
@@ -760,6 +763,9 @@ function ExpandableCard({
   const glyph = memoryTypeGlyph[record.type];
   const label = memoryTypeLabel[record.type];
   const daysAgo = Math.round((Date.now() - record.date) / (24 * 60 * 60 * 1000));
+  const sigScore = computeSignificance(record);
+  const sigLevel = significanceLevel(sigScore);
+  const sigColor = SIGNIFICANCE_COLOR[sigLevel];
 
   return (
     <TouchableOpacity
@@ -785,6 +791,17 @@ function ExpandableCard({
         <View style={styles.resonanceRow}>
           <View style={[styles.resonanceDot, { backgroundColor: accent }]} />
           <Text style={[styles.resonanceText, { color: accent }]}>Resonates with your covenant</Text>
+        </View>
+      )}
+
+      {/* Significance badge — visible when memory has gained importance */}
+      {sigScore >= 0.6 && !record.linkedPromiseId && !isActive && (
+        <View style={styles.resonanceRow}>
+          <View style={[styles.resonanceDot, { backgroundColor: sigColor }]} />
+          <Text style={[styles.resonanceText, { color: sigColor }]}>
+            {SIGNIFICANCE_LABEL[sigLevel]}
+            {record.isFoundational ? ' — Foundational' : ''}
+          </Text>
         </View>
       )}
 

@@ -4,6 +4,7 @@ import { TRIGGER_PRIORITY } from './composerTypes';
 import type { OathState } from './oathState';
 import { detectResonance } from './resonanceEngine';
 import type { ResonanceGroup } from './resonanceEngine';
+import { selectMirrorMemories } from './memoryEvolution';
 
 const DAY = 24 * 60 * 60 * 1000;
 
@@ -318,6 +319,68 @@ function buildResonanceExperience(group: ResonanceGroup): ComposedExperience {
   };
 }
 
+// ── Evolved Mirror builders ────────────────────────────────────
+// These builders use the evolution engine to surface memories
+// that have gained significance through reinforcement over time.
+
+function buildFoundationalEcho(memories: MemoryRecord[]): ComposedExperience | null {
+  const foundational = memories
+    .filter((m) => m.isFoundational && m.type !== 'promise')
+    .sort((a, b) => a.date - b.date);
+
+  if (foundational.length === 0) return null;
+
+  // Pair oldest foundational with most recent non-foundational high-weight entry
+  const anchor = foundational[0];
+  const evolved = selectMirrorMemories(memories, 10);
+  const echo = evolved.find((m) => !m.isFoundational && m.id !== anchor.id && m.date > anchor.date);
+
+  if (!echo) return null;
+
+  const anchorDays = Math.round((Date.now() - anchor.date) / DAY);
+  const echoDays = Math.round((Date.now() - echo.date) / DAY);
+  const anchorStr = anchorDays === 1 ? '1 day ago' : `${anchorDays} days ago`;
+  const echoStr = echoDays === 0 ? 'Today' : echoDays === 1 ? 'Yesterday' : `${echoDays} days ago`;
+
+  return {
+    id: `exp_foundation_${Date.now()}`,
+    type: 'person_you_becoming',
+    trigger: 'show_me',
+    hook: 'OATH found a through-line.',
+    body: `${anchorStr}:\n\n"${excerpt(anchor.content)}"\n\n${echoStr}:\n\n"${excerpt(echo.content)}"`,
+    pivot: 'That first entry became foundational. Everything since has grown from it.',
+    records: [anchor, echo],
+    prompts: ['I see it', 'Tell me more', "I hadn't made that connection"],
+    composedAt: Date.now(),
+  };
+}
+
+function buildEvolvedHighPoint(memories: MemoryRecord[]): ComposedExperience | null {
+  const evolved = selectMirrorMemories(memories, 10);
+
+  // Find the most-reinforced record that is old enough to be surprising
+  const candidate = evolved.find(
+    (m) => m.date < Date.now() - 7 * DAY && (m.referenceCount ?? 0) > 0 && !m.isFoundational,
+  );
+  if (!candidate) return null;
+
+  const refs = candidate.referenceCount ?? 0;
+  const days = Math.round((Date.now() - candidate.date) / DAY);
+  const daysStr = days === 1 ? '1 day ago' : `${days} days ago`;
+
+  return {
+    id: `exp_evolved_${Date.now()}`,
+    type: 'proof_you_needed',
+    trigger: 'show_me',
+    hook: 'This keeps gaining weight.',
+    body: `"${excerpt(candidate.content, 140)}"\n\n${daysStr}. OATH has returned to it ${refs} time${refs !== 1 ? 's' : ''}.`,
+    pivot: 'Some things matter more the longer they sit. This is one of them.',
+    records: [candidate],
+    prompts: ["I know why", "I hadn't noticed", 'What are you seeing?'],
+    composedAt: Date.now(),
+  };
+}
+
 // State → trigger mapping for Mirror composition.
 const STATE_TO_TRIGGER: Record<OathState['key'], ExperienceTrigger> = {
   watching:    'show_me',
@@ -347,12 +410,22 @@ export function composeMirror(
   const strongResonance = resonances.find((r) => r.strength >= 0.5);
   if (strongResonance) return buildResonanceExperience(strongResonance);
 
-  // 2. State-driven — OATH's current perspective shapes what it shows.
+  // 2. Foundational echo — a through-line OATH has been watching form.
+  //    Only fires when the record has depth (foundational memories exist).
+  const foundational = buildFoundationalEcho(memories);
+  if (foundational) return foundational;
+
+  // 3. Evolved high point — something gaining weight through reinforcement.
+  //    OATH surfaces what keeps mattering more, not just what happened recently.
+  const evolved = buildEvolvedHighPoint(memories);
+  if (evolved) return evolved;
+
+  // 4. State-driven — OATH's current perspective shapes what it shows.
   const stateTrigger = STATE_TO_TRIGGER[oathState.key];
   const stateExp = composeExperience(covenant, memories, stateTrigger, recentTypes);
   if (stateExp) return stateExp;
 
-  // 3. Full freedom — if nothing else, any experience will do.
+  // 5. Full freedom — if nothing else, any experience will do.
   return composeExperience(covenant, memories, 'show_me', recentTypes);
 }
 

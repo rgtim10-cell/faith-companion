@@ -22,12 +22,13 @@ import {
   generateReflectionQuestion,
   selectClosingLine,
 } from '@/engine/ritualEngine';
+import { computeSignificance } from '@/engine/memoryEvolution';
 import { colors, radius, spacing, typography } from '@/design/tokens';
 
 type Phase = 'question' | 'writing' | 'sealed';
 
 export function NightReflectionScreen() {
-  const { covenant, memories, feedback, addMemory } = useCovenant();
+  const { covenant, memories, feedback, addMemory, reinforceMemory } = useCovenant();
   const { isSealed, sealDay } = useDaily();
   const insets = useSafeAreaInsets();
   const navigation = useNavigation();
@@ -47,6 +48,19 @@ export function NightReflectionScreen() {
   const [phase, setPhase] = useState<Phase>(isSealed ? 'sealed' : 'question');
   const [response, setResponse] = useState('');
   const [closingLine, setClosingLine] = useState('');
+
+  // Carry-forward state — surfaces after sealing
+  const [carryText, setCarryText] = useState('');
+  const [carryConfirmed, setCarryConfirmed] = useState(false);
+  const [showCarryInput, setShowCarryInput] = useState(false);
+
+  // Carry-forward prompt: shown when OATH state suggests meaningful day
+  const showCarryPrompt = !carryConfirmed && (
+    oathState.key === 'proud' ||
+    oathState.key === 'encouraged' ||
+    oathState.key === 'concerned' ||
+    oathState.key === 'challenging'
+  );
 
   // Entrance fade
   const fadeAnim = useRef(new Animated.Value(0)).current;
@@ -112,6 +126,26 @@ export function NightReflectionScreen() {
     });
 
     transitionPhase('sealed');
+  };
+
+  const handleCarryForward = () => {
+    const trimmed = carryText.trim();
+    if (trimmed.length > 0) {
+      // Create a carry-forward memory — high weight, protected from decay
+      const cfMemory = addMemory({
+        type: 'truth',
+        title: 'Carried forward',
+        content: trimmed,
+        emotionalWeight: 0.82,
+        tags: ['carry-forward', 'night'],
+        linkedPromiseId: covenant?.id,
+        source: 'night_reflection',
+      });
+      reinforceMemory(cfMemory.id, 'carry_forward');
+      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success).catch(() => {});
+    }
+    setCarryConfirmed(true);
+    setShowCarryInput(false);
   };
 
   const handleClose = () => {
@@ -223,6 +257,67 @@ export function NightReflectionScreen() {
               <View style={styles.continuitySeal}>
                 <Text style={styles.continuityText}>The record continues.</Text>
               </View>
+
+              {/* Carry-forward — OATH asks what should survive */}
+              {showCarryPrompt && (
+                <View style={styles.carryBlock}>
+                  <View style={styles.carryDivider} />
+                  <Text style={styles.carryQuestion}>
+                    What should survive today?
+                  </Text>
+                  <Text style={styles.carryAttrib}>— OATH</Text>
+
+                  {!showCarryInput && (
+                    <View style={styles.carryActions}>
+                      <TouchableOpacity
+                        onPress={() => setShowCarryInput(true)}
+                        style={styles.carryOpenBtn}
+                        activeOpacity={0.8}
+                      >
+                        <Text style={styles.carryOpenBtnText}>Carry something forward</Text>
+                      </TouchableOpacity>
+                      <TouchableOpacity
+                        onPress={() => setCarryConfirmed(true)}
+                        hitSlop={8}
+                        activeOpacity={0.6}
+                      >
+                        <Text style={styles.carrySkipText}>Not tonight</Text>
+                      </TouchableOpacity>
+                    </View>
+                  )}
+
+                  {showCarryInput && (
+                    <View style={styles.carryInputBlock}>
+                      <TextInput
+                        value={carryText}
+                        onChangeText={setCarryText}
+                        placeholder="What OATH should hold..."
+                        placeholderTextColor={colors.textSubtle}
+                        multiline
+                        autoFocus
+                        style={styles.carryInput}
+                        textAlignVertical="top"
+                      />
+                      <TouchableOpacity
+                        onPress={handleCarryForward}
+                        style={[styles.carryConfirmBtn, { opacity: carryText.trim().length > 0 ? 1 : 0.4 }]}
+                        disabled={carryText.trim().length === 0}
+                        activeOpacity={0.8}
+                      >
+                        <Text style={styles.carryConfirmText}>
+                          {carryText.trim().length > 0 ? 'Carry this forward →' : 'Nothing to carry →'}
+                        </Text>
+                      </TouchableOpacity>
+                    </View>
+                  )}
+                </View>
+              )}
+
+              {carryConfirmed && carryText.trim().length > 0 && (
+                <View style={styles.carryConfirmedRow}>
+                  <Text style={styles.carryConfirmedText}>◈ Carried forward. OATH holds it.</Text>
+                </View>
+              )}
 
               <TouchableOpacity
                 onPress={handleClose}
@@ -457,5 +552,92 @@ const styles = StyleSheet.create({
     fontWeight: '400',
     color: 'rgba(255,255,255,0.65)',
     letterSpacing: -0.1,
+  },
+
+  // ── Carry-forward ──────────────────────────────────────────
+  carryBlock: {
+    alignSelf: 'stretch',
+    gap: spacing.md,
+  },
+  carryDivider: {
+    height: StyleSheet.hairlineWidth,
+    backgroundColor: 'rgba(255,255,255,0.08)',
+  },
+  carryQuestion: {
+    fontSize: 20,
+    fontWeight: '300',
+    color: 'rgba(255,255,255,0.65)',
+    lineHeight: 30,
+    letterSpacing: -0.4,
+    maxWidth: 300,
+  },
+  carryAttrib: {
+    fontSize: 11,
+    color: 'rgba(255,255,255,0.2)',
+    fontStyle: 'italic',
+    marginTop: -spacing.sm,
+  },
+  carryActions: {
+    gap: spacing.sm,
+    alignItems: 'flex-start',
+  },
+  carryOpenBtn: {
+    paddingVertical: 10,
+    paddingHorizontal: spacing.lg,
+    borderRadius: radius.lg,
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.14)',
+    backgroundColor: 'rgba(255,255,255,0.04)',
+  },
+  carryOpenBtnText: {
+    fontSize: 14,
+    fontWeight: '400',
+    color: 'rgba(255,255,255,0.6)',
+    letterSpacing: -0.1,
+  },
+  carrySkipText: {
+    fontSize: 12,
+    color: 'rgba(255,255,255,0.22)',
+    paddingVertical: 4,
+    letterSpacing: 0.1,
+  },
+  carryInputBlock: {
+    gap: spacing.md,
+    alignSelf: 'stretch',
+  },
+  carryInput: {
+    fontSize: 16,
+    fontWeight: '300',
+    color: colors.text,
+    lineHeight: 26,
+    letterSpacing: -0.2,
+    minHeight: 80,
+    borderBottomWidth: StyleSheet.hairlineWidth,
+    borderBottomColor: 'rgba(255,255,255,0.1)',
+    paddingBottom: spacing.sm,
+  },
+  carryConfirmBtn: {
+    paddingVertical: 11,
+    paddingHorizontal: spacing.lg,
+    borderRadius: radius.lg,
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.16)',
+    backgroundColor: 'rgba(255,255,255,0.05)',
+    alignSelf: 'flex-start',
+  },
+  carryConfirmText: {
+    fontSize: 14,
+    fontWeight: '400',
+    color: 'rgba(255,255,255,0.6)',
+    letterSpacing: -0.1,
+  },
+  carryConfirmedRow: {
+    paddingVertical: spacing.xs,
+  },
+  carryConfirmedText: {
+    fontSize: 12,
+    color: 'rgba(255,255,255,0.3)',
+    fontStyle: 'italic',
+    letterSpacing: 0.1,
   },
 });
