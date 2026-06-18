@@ -64,7 +64,7 @@ function buildProofYouNeeded(
     body: `You wrote this:\n\n"${excerpt(doubt.content)}"\n\n${betweenStr}:\n\n"${excerpt(proof.content)}"`,
     pivot: 'The doubt was real. So is this.',
     records: [doubt, proof],
-    prompts: ["I don't see it yet", 'Connect this to now', 'What else do you see?'],
+    prompts: ["I don't see it yet", 'This still holds', "I've grown past this"],
     composedAt: Date.now(),
   };
 }
@@ -98,7 +98,7 @@ function buildSomethingChanged(
     body: bodyLines.join('\n'),
     pivot: 'What happened?',
     records: recentStruggles.slice(0, 3),
-    prompts: ['I know what happened', "I'm not sure", 'Help me see it'],
+    prompts: ['I know what happened', "I'm not sure", 'OATH is right'],
     composedAt: Date.now(),
   };
 }
@@ -141,7 +141,7 @@ function buildPatternICantIgnore(
     body: `You ${verb}\n\n${examples}`,
     pivot: 'This is not a coincidence. This is who you are.',
     records,
-    prompts: ["I hadn't noticed", 'Tell me more', "I disagree — this isn't a pattern"],
+    prompts: ["I hadn't noticed", "This is who I am", "I see it differently"],
     composedAt: Date.now(),
   };
 }
@@ -186,7 +186,7 @@ function buildPersonYouBecoming(
     body,
     pivot: 'You are already that person. The record says so.',
     records: [covenantAsRecord(covenant), ...linked.slice(0, 3)],
-    prompts: ["I can't see it yet", 'Show me the evidence', 'I want to go deeper'],
+    prompts: ["I can't see it yet", "The record is right", "OATH is wrong about this"],
     composedAt: Date.now(),
   };
 }
@@ -220,7 +220,7 @@ function buildSurpriseMe(
       body: `"${excerpt(old.content)}"\n\n${echoDays === 0 ? 'Today' : echoDays === 1 ? 'Yesterday' : `${echoDays} days ago`}:\n\n"${excerpt(echo.content)}"`,
       pivot: 'OATH did not plan to show you this today. It surfaced anyway.',
       records: [old, echo],
-      prompts: ['This still matters', "I've moved past this", "Tell me what you're seeing"],
+      prompts: ['This still matters', "I've moved past this", "I see the connection"],
       composedAt: Date.now(),
     };
   }
@@ -243,7 +243,7 @@ function buildSurpriseMe(
       body: `"${excerpt(truth.content, 120)}"\n\nYou wrote this ${daysAgo(truth.date)} days ago.\n\nThis is what it answers:\n\n"${excerpt(recentStruggle.content)}"`,
       pivot: 'You already knew what you needed to know.',
       records: [truth, recentStruggle],
-      prompts: ['This still applies', "I've moved past this", 'Connect this to today'],
+      prompts: ['This still applies', "I've moved past this", 'Name it clearly'],
       composedAt: Date.now(),
     };
   }
@@ -263,7 +263,7 @@ function buildSurpriseMe(
       body: `"${excerpt(strongest.content, 140)}"`,
       pivot: 'Remember this.',
       records: [strongest],
-      prompts: ['This still matters', "I've grown past this", 'Why are you showing me this?'],
+      prompts: ['This still matters', "I've grown past this", "Hold onto this"],
       composedAt: Date.now(),
     };
   }
@@ -314,7 +314,7 @@ function buildResonanceExperience(group: ResonanceGroup): ComposedExperience {
     body: `${group.spanDays} days apart:\n\n"${excerpt(oldest.content)}"\n\n"${excerpt(newest.content)}"`,
     pivot: voice.pivot,
     records: group.memories,
-    prompts: ['I see it', "I don't see the connection", 'What should I do with this?'],
+    prompts: ['I see it', "I don't see the connection", "It keeps surfacing"],
     composedAt: Date.now(),
   };
 }
@@ -350,7 +350,7 @@ function buildFoundationalEcho(memories: MemoryRecord[]): ComposedExperience | n
     body: `${anchorStr}:\n\n"${excerpt(anchor.content)}"\n\n${echoStr}:\n\n"${excerpt(echo.content)}"`,
     pivot: 'That first entry became foundational. Everything since has grown from it.',
     records: [anchor, echo],
-    prompts: ['I see it', 'Tell me more', "I hadn't made that connection"],
+    prompts: ['I see the line', "I hadn't made that connection", "There's more here"],
     composedAt: Date.now(),
   };
 }
@@ -376,7 +376,7 @@ function buildEvolvedHighPoint(memories: MemoryRecord[]): ComposedExperience | n
     body: `"${excerpt(candidate.content, 140)}"\n\n${daysStr}. OATH has returned to it ${refs} time${refs !== 1 ? 's' : ''}.`,
     pivot: 'Some things matter more the longer they sit. This is one of them.',
     records: [candidate],
-    prompts: ["I know why", "I hadn't noticed", 'What are you seeing?'],
+    prompts: ["I know why", "I hadn't noticed", "It keeps gaining weight"],
     composedAt: Date.now(),
   };
 }

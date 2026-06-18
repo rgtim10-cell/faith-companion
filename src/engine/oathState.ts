@@ -81,7 +81,7 @@ export function computeOathState(
   if (recentWins >= 2) {
     return {
       key: 'encouraged',
-      statement: `Something is building. OATH can see it.`,
+      statement: `${recentWins} wins in 14 days. Something is building.`,
       intensity: Math.min(1, 0.5 + recentWins * 0.1),
     };
   }
@@ -90,7 +90,7 @@ export function computeOathState(
   if (totalWins >= 6 && recent7.length < 2) {
     return {
       key: 'challenging',
-      statement: `The record is strong. OATH wants to know what comes next.`,
+      statement: `${totalWins} wins on record. It has been quiet.`,
       intensity: 0.6,
     };
   }

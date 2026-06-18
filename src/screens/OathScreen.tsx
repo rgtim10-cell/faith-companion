@@ -29,6 +29,7 @@ import type { OathState } from '@/engine/oathState';
 import { OATH_STATE_COLOR, OATH_STATE_GLYPH } from '@/engine/oathState';
 import { generateMorningReturn } from '@/engine/ritualEngine';
 import { detectTheaterExperience } from '@/engine/theaterEngine';
+import { getFirstWeekLine } from '@/engine/oathVoice';
 import type { FeedbackReaction, ManifestationType, MemoryRecord } from '@/data/memoryGraph';
 import {
   manifestationLabel,
@@ -170,6 +171,12 @@ export function OathScreen() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
     [memories.length, covenant?.id, feedback.length],
   );
+
+  // First-week context line — appears during the opening 7 days.
+  const covenantAgeDays = covenant
+    ? Math.floor((Date.now() - covenant.createdAt) / (24 * 60 * 60 * 1000))
+    : null;
+  const firstWeekLine = covenantAgeDays !== null ? getFirstWeekLine(covenantAgeDays) : null;
 
   // Morning return — surfaces once per session when yesterday's record exists.
   const morningReturn = useMemo(
@@ -347,7 +354,7 @@ export function OathScreen() {
         <RealmBackground />
         <View style={[styles.emptyState, { paddingTop: insets.top + spacing.xxl }]}>
           <Text style={styles.emptyText}>
-            Tell me something, and I'll tell you what I see.
+            The record is empty. OATH is watching.
           </Text>
           <TouchableOpacity onPress={openCommunion}
             style={[styles.emptyBtn, { borderColor: realm.accent + '55' }]}
@@ -399,6 +406,11 @@ export function OathScreen() {
             line={morningReturn}
             onDismiss={() => setMorningDismissed(true)}
           />
+        )}
+
+        {/* First-week marker — quiet acknowledgment of the new record. */}
+        {firstWeekLine && (
+          <Text style={styles.firstWeekLine}>{firstWeekLine}</Text>
         )}
 
         {/* OATH state — quiet presence indicator. Always visible. */}
@@ -663,7 +675,7 @@ const WHY_THIS_MATTERS: Partial<Record<ManifestationType, (promise: string | nul
   memory: () =>
     'Some things are worth keeping exactly as they were. Not revised. Not improved. Just held.',
   learning: () =>
-    'Patterns only become visible with enough data. You have generated enough. What you do next with this is up to you.',
+    'Patterns only become visible with enough data. You have generated enough to see this one clearly.',
   future_self: (p) =>
     p
       ? `The version of you who said "${p.slice(0, 50)}${p.length > 50 ? '...' : ''}" — you are already that person. The gap is smaller than you think.`
@@ -784,12 +796,17 @@ function ExpandableCard({
   const sigScore = computeSignificance(record);
   const sigLevel = significanceLevel(sigScore);
   const sigColor = SIGNIFICANCE_COLOR[sigLevel];
+  const isSignificant = sigScore >= 0.75;
 
   return (
     <TouchableOpacity
       onPress={onToggle}
       activeOpacity={0.82}
-      style={[styles.card, { borderColor: accent + '1E', backgroundColor: accent + '07' }]}
+      style={[
+        styles.card,
+        { borderColor: accent + '1E', backgroundColor: accent + '07' },
+        isSignificant && { borderColor: accent + '2E', paddingVertical: spacing.md + 4 },
+      ]}
     >
       <View style={styles.cardHeader}>
         <View style={styles.cardBadge}>
@@ -800,7 +817,10 @@ function ExpandableCard({
           {daysAgo === 0 ? 'Today' : daysAgo === 1 ? 'Yesterday' : `${daysAgo}d ago`}
         </Text>
       </View>
-      <Text style={styles.cardContent} numberOfLines={isActive ? undefined : 2}>
+      <Text
+        style={[styles.cardContent, isSignificant && styles.cardContentSignificant]}
+        numberOfLines={isActive ? undefined : 2}
+      >
         {record.content}
       </Text>
 
@@ -904,6 +924,40 @@ function ExperienceView({
   const glyph = EXPERIENCE_GLYPHS[exp.type];
   const label = EXPERIENCE_LABELS[exp.type];
 
+  // Staggered reveal — hook appears first, then body, then pivot.
+  // Creates the feeling of OATH choosing each word deliberately.
+  const hookOpacity = useRef(new Animated.Value(0)).current;
+  const hookY      = useRef(new Animated.Value(8)).current;
+  const bodyOpacity = useRef(new Animated.Value(0)).current;
+  const bodyY      = useRef(new Animated.Value(10)).current;
+  const pivotOpacity = useRef(new Animated.Value(0)).current;
+  const pivotY     = useRef(new Animated.Value(12)).current;
+
+  useEffect(() => {
+    hookOpacity.setValue(0); hookY.setValue(8);
+    bodyOpacity.setValue(0); bodyY.setValue(10);
+    pivotOpacity.setValue(0); pivotY.setValue(12);
+
+    const ease = Easing.out(Easing.quad);
+    Animated.sequence([
+      Animated.parallel([
+        Animated.timing(hookOpacity, { toValue: 1, duration: 520, easing: ease, useNativeDriver: true }),
+        Animated.timing(hookY,      { toValue: 0, duration: 520, easing: ease, useNativeDriver: true }),
+      ]),
+      Animated.delay(240),
+      Animated.parallel([
+        Animated.timing(bodyOpacity, { toValue: 1, duration: 480, easing: ease, useNativeDriver: true }),
+        Animated.timing(bodyY,      { toValue: 0, duration: 480, easing: ease, useNativeDriver: true }),
+      ]),
+      Animated.delay(300),
+      Animated.parallel([
+        Animated.timing(pivotOpacity, { toValue: 1, duration: 460, easing: ease, useNativeDriver: true }),
+        Animated.timing(pivotY,      { toValue: 0, duration: 460, easing: ease, useNativeDriver: true }),
+      ]),
+    ]).start();
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [exp.id]);
+
   return (
     <Animated.View style={[expStyles.container, { opacity: fadeAnim }]}>
       {/* Experience type badge */}
@@ -912,22 +966,25 @@ function ExperienceView({
         <Text style={[expStyles.badgeLabel, { color: accent }]}>{label}</Text>
       </View>
 
-      {/* Mirror preamble — OATH's state statement before the narrative.
-          Only shown when triggered via "Show me what you see." */}
+      {/* Mirror preamble — OATH's state before the narrative. */}
       {mirrorStatement && (
         <Text style={expStyles.preamble}>{mirrorStatement}</Text>
       )}
 
-      {/* Hook — the opening line that must stop the user */}
-      <Text style={expStyles.hook}>{exp.hook}</Text>
+      {/* Hook — appears first */}
+      <Animated.View style={{ opacity: hookOpacity, transform: [{ translateY: hookY }] }}>
+        <Text style={expStyles.hook}>{exp.hook}</Text>
+      </Animated.View>
 
-      {/* Body — the narrative with real memory content */}
-      <View style={[expStyles.bodyBlock, { borderLeftColor: accent + '40' }]}>
+      {/* Body — appears second */}
+      <Animated.View style={[expStyles.bodyBlock, { borderLeftColor: accent + '40', opacity: bodyOpacity, transform: [{ translateY: bodyY }] }]}>
         <Text style={expStyles.body}>{exp.body}</Text>
-      </View>
+      </Animated.View>
 
-      {/* Pivot — the turn: revelation, question, or quiet statement */}
-      <Text style={[expStyles.pivot, { color: accent }]}>{exp.pivot}</Text>
+      {/* Pivot — appears last */}
+      <Animated.View style={{ opacity: pivotOpacity, transform: [{ translateY: pivotY }] }}>
+        <Text style={[expStyles.pivot, { color: accent }]}>{exp.pivot}</Text>
+      </Animated.View>
 
       {/* Supporting records */}
       {exp.records.length > 0 && (
@@ -1132,6 +1189,14 @@ const styles = StyleSheet.create({
   },
   emptyBtnText: { ...typography.bodyMd, fontWeight: '500' },
 
+  firstWeekLine: {
+    fontSize: 11,
+    color: 'rgba(255,255,255,0.25)',
+    letterSpacing: 0.8,
+    fontStyle: 'italic',
+    marginBottom: spacing.sm,
+  },
+
   // Header
   header: {
     flexDirection: 'row',
@@ -1200,6 +1265,12 @@ const styles = StyleSheet.create({
     color: colors.textSecondary,
     lineHeight: 21,
     letterSpacing: -0.1,
+  },
+  cardContentSignificant: {
+    fontSize: 16,
+    lineHeight: 26,
+    color: 'rgba(255,255,255,0.72)',
+    letterSpacing: -0.2,
   },
   cardActions: {
     flexDirection: 'row',

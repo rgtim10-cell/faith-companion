@@ -175,7 +175,7 @@ function MemoryRow({ record }: { record: MemoryRecord }) {
           )}
         </View>
         <Text
-          style={styles.rowContent}
+          style={[styles.rowContent, computeSignificance(record) >= 0.75 && styles.rowContentSignificant]}
           numberOfLines={expanded ? undefined : 2}
         >
           {record.content}
@@ -287,6 +287,12 @@ const styles = StyleSheet.create({
     ...typography.bodyMd,
     color: colors.textSecondary,
     lineHeight: 20,
+  },
+  rowContentSignificant: {
+    fontSize: 16,
+    lineHeight: 26,
+    color: 'rgba(255,255,255,0.72)',
+    letterSpacing: -0.2,
   },
   weightRow: { flexDirection: 'row', alignItems: 'center', gap: 5, marginTop: 2 },
   weightDot: { width: 5, height: 5, borderRadius: 3 },
