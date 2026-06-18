@@ -10,29 +10,8 @@ import { VaultScreen } from '@/screens/VaultScreen';
 import { NightReflectionScreen } from '@/screens/NightReflectionScreen';
 import { CommunionScreen } from '@/screens/CommunionScreen';
 import { CovenantScreen } from '@/screens/CovenantScreen';
-import { TheaterScreen } from '@/screens/TheaterScreen';
-import { InterventionScreen } from '@/screens/InterventionScreen';
+import { ManifestationCanvas } from '@/screens/ManifestationCanvas';
 import { useCovenant } from '@/context/CovenantContext';
-import type { RootStackParamList, TabParamList } from '@/types';
-
-const Stack = createNativeStackNavigator<RootStackParamList>();
-const Tab = createBottomTabNavigator<TabParamList>();
-
-function TabNavigator() {
-  return (
-    <Tab.Navigator
-      tabBar={(props) => <TabBar {...props} />}
-      screenOptions={{ headerShown: false }}
-      initialRouteName="Oath"
-    >
-      <Tab.Screen name="Today" component={TodayScreen} />
-      <Tab.Screen name="Evidence" component={EvidenceUploadScreen} />
-      <Tab.Screen name="Oath" component={OathScreen} />
-      <Tab.Screen name="Memory" component={MemoryGraphScreen} />
-      <Tab.Screen name="Vault" component={VaultScreen} />
-    </Tab.Navigator>
-  );
-}
 
 export function RootNavigator() {
   const { covenant, isLoading } = useCovenant();
@@ -43,39 +22,7 @@ export function RootNavigator() {
   // First launch: present the Covenant ceremony before the main experience.
   if (!covenant) return <CovenantScreen />;
 
-  return (
-    <Stack.Navigator screenOptions={{ headerShown: false }}>
-      <Stack.Screen name="Tabs" component={TabNavigator} />
-      <Stack.Screen
-        name="NightReflection"
-        component={NightReflectionScreen}
-        options={{ presentation: 'modal', animation: 'slide_from_bottom' }}
-      />
-      <Stack.Screen
-        name="Communion"
-        component={CommunionScreen}
-        options={{ presentation: 'modal', animation: 'fade', gestureEnabled: false }}
-      />
-      <Stack.Screen
-        name="Theater"
-        component={TheaterScreen}
-        options={{
-          presentation: 'fullScreenModal',
-          animation: 'fade',
-          animationDuration: 900,
-          gestureEnabled: false,
-        }}
-      />
-      <Stack.Screen
-        name="Intervention"
-        component={InterventionScreen}
-        options={{
-          presentation: 'fullScreenModal',
-          animation: 'fade',
-          animationDuration: 700,
-          gestureEnabled: false,
-        }}
-      />
-    </Stack.Navigator>
-  );
+  // ── One Screen experiment ──────────────────────────────────
+  // No tabs. No stack. No destinations. OATH is a single adaptive surface.
+  return <ManifestationCanvas />;
 }
