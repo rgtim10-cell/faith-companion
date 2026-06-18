@@ -18,6 +18,9 @@ import { RealmBackground } from '@/components/layout/RealmBackground';
 import { useCovenant } from '@/context/CovenantContext';
 import { useRealm } from '@/context/RealmContext';
 import { buildManifestations, findManifestationOfType } from '@/engine/manifestation';
+import { composeExperience } from '@/engine/composer';
+import type { ComposedExperience, ExperienceType } from '@/engine/composerTypes';
+import { EXPERIENCE_GLYPHS, EXPERIENCE_LABELS } from '@/engine/composerTypes';
 import type { FeedbackReaction, ManifestationType, MemoryRecord } from '@/data/memoryGraph';
 import {
   manifestationLabel,
@@ -147,6 +150,8 @@ export function OathScreen() {
   const [showExplanation, setShowExplanation] = useState(false);
   const [savedAsEvidence, setSavedAsEvidence] = useState<Set<string>>(new Set());
   const [feedbackGiven, setFeedbackGiven] = useState<Partial<Record<ManifestationType, FeedbackReaction>>>({});
+  const [composedExp, setComposedExp] = useState<ComposedExperience | null>(null);
+  const [recentExpTypes, setRecentExpTypes] = useState<ExperienceType[]>([]);
 
   const current = allManifestations[Math.min(manifestIdx, allManifestations.length - 1)] ?? null;
   const theme = current ? THEMES[current.type] : THEMES.future_self;
@@ -161,6 +166,7 @@ export function OathScreen() {
     useCallback(() => {
       setActiveCardId(null);
       setShowExplanation(false);
+      setComposedExp(null);
 
       Animated.parallel([
         Animated.timing(fadeAnim, { toValue: 1, duration: 800, easing: Easing.out(Easing.quad), useNativeDriver: true }),
@@ -168,6 +174,20 @@ export function OathScreen() {
       ]).start();
       bloomAnim.setValue(theme.bloomOpacity);
     }, [theme.bloomOpacity, fadeAnim, bloomAnim, intensity]),
+  );
+
+  const tryCompose = useCallback(
+    (trigger: Parameters<typeof composeExperience>[2]) => {
+      const exp = composeExperience(covenant, memories, trigger, recentExpTypes);
+      if (exp) {
+        setComposedExp(exp);
+        setRecentExpTypes((prev) => [exp.type, ...prev].slice(0, 3));
+        Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium).catch(() => {});
+        fadeAnim.setValue(0);
+        Animated.timing(fadeAnim, { toValue: 1, duration: 600, easing: Easing.out(Easing.quad), useNativeDriver: true }).start();
+      }
+    },
+    [covenant, memories, recentExpTypes, fadeAnim],
   );
 
   const handleFeedback = (reaction: FeedbackReaction) => {
@@ -201,14 +221,43 @@ export function OathScreen() {
   const handleShowMe = () => {
     const next = (Math.min(manifestIdx, allManifestations.length - 1) + 1) % allManifestations.length;
     switchTo(next);
+    tryCompose('show_me');
   };
 
   const handleMotivation = () => {
     switchTo(findManifestationOfType(allManifestations, ['confidence', 'evidence']));
+    tryCompose('motivation');
   };
 
   const handleDrift = () => {
     switchTo(findManifestationOfType(allManifestations, ['drift', 'truth']));
+    tryCompose('drift');
+  };
+
+  const handleChallenge = () => {
+    const exp = composeExperience(covenant, memories, 'challenge', recentExpTypes);
+    if (exp) {
+      setComposedExp(exp);
+      setRecentExpTypes((prev) => [exp.type, ...prev].slice(0, 3));
+      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium).catch(() => {});
+      fadeAnim.setValue(0);
+      Animated.timing(fadeAnim, { toValue: 1, duration: 600, easing: Easing.out(Easing.quad), useNativeDriver: true }).start();
+    } else {
+      handleShowMe();
+    }
+  };
+
+  const handleSurprise = () => {
+    const exp = composeExperience(covenant, memories, 'surprise', recentExpTypes);
+    if (exp) {
+      setComposedExp(exp);
+      setRecentExpTypes((prev) => [exp.type, ...prev].slice(0, 3));
+      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Heavy).catch(() => {});
+      fadeAnim.setValue(0);
+      Animated.timing(fadeAnim, { toValue: 1, duration: 800, easing: Easing.out(Easing.quad), useNativeDriver: true }).start();
+    } else {
+      handleShowMe();
+    }
   };
 
   const handleSaveAsEvidence = (record: MemoryRecord) => {
@@ -301,7 +350,20 @@ export function OathScreen() {
           </Text>
         </Animated.View>
 
-        <Animated.View style={[styles.body, { opacity: fadeAnim }]}>
+        {/* Experience mode — composer output overlays the body when a trigger fires */}
+        {composedExp ? (
+          <ExperienceView
+            exp={composedExp}
+            accent={theme.accent}
+            fadeAnim={fadeAnim}
+            onDismiss={() => setComposedExp(null)}
+            onPromptPress={openCommunion}
+            onSaveEvidence={handleSaveAsEvidence}
+            savedIds={savedAsEvidence}
+          />
+        ) : null}
+
+        <Animated.View style={[styles.body, { opacity: fadeAnim, display: composedExp ? 'none' : 'flex' }]}>
           {/* Supporting records — chain gets a timeline; others get expandable cards */}
           {current.records.length > 0 && (
             <View style={styles.records}>
@@ -385,6 +447,8 @@ export function OathScreen() {
             <TriggerRow label="Show me what you see" sub="OATH selects something from your Memory" onPress={handleShowMe} />
             <TriggerRow label="I need motivation" sub="OATH surfaces your own evidence and proof" onPress={handleMotivation} />
             <TriggerRow label="I'm drifting" sub="OATH names what it sees honestly" onPress={handleDrift} />
+            <TriggerRow label="Challenge me" sub="OATH names the pattern you haven't named" onPress={handleChallenge} />
+            <TriggerRow label="Surprise me" sub="OATH picks — no filter, no prediction" onPress={handleSurprise} />
           </View>
         </Animated.View>
       </ScrollView>
@@ -698,6 +762,145 @@ function TriggerRow({ label, sub, onPress }: { label: string; sub: string; onPre
     </TouchableOpacity>
   );
 }
+
+// ── ExperienceView ────────────────────────────────────────────
+// Rendered when a trigger fires and the composer returns a ComposedExperience.
+// Replaces the body content with a narrative arc: hook → body → pivot.
+
+function ExperienceView({
+  exp,
+  accent,
+  fadeAnim,
+  onDismiss,
+  onPromptPress,
+  onSaveEvidence,
+  savedIds,
+}: {
+  exp: ComposedExperience;
+  accent: string;
+  fadeAnim: Animated.Value;
+  onDismiss: () => void;
+  onPromptPress: () => void;
+  onSaveEvidence: (r: MemoryRecord) => void;
+  savedIds: Set<string>;
+}) {
+  const [activeCardId, setActiveCardId] = useState<string | null>(null);
+  const glyph = EXPERIENCE_GLYPHS[exp.type];
+  const label = EXPERIENCE_LABELS[exp.type];
+
+  return (
+    <Animated.View style={[expStyles.container, { opacity: fadeAnim }]}>
+      {/* Experience type badge */}
+      <View style={[expStyles.badge, { borderColor: accent + '35' }]}>
+        <Text style={[expStyles.badgeGlyph, { color: accent }]}>{glyph}</Text>
+        <Text style={[expStyles.badgeLabel, { color: accent }]}>{label}</Text>
+      </View>
+
+      {/* Hook — the opening line that must stop the user */}
+      <Text style={expStyles.hook}>{exp.hook}</Text>
+
+      {/* Body — the narrative with real memory content */}
+      <View style={[expStyles.bodyBlock, { borderLeftColor: accent + '40' }]}>
+        <Text style={expStyles.body}>{exp.body}</Text>
+      </View>
+
+      {/* Pivot — the turn: revelation, question, or quiet statement */}
+      <Text style={[expStyles.pivot, { color: accent }]}>{exp.pivot}</Text>
+
+      {/* Supporting records */}
+      {exp.records.length > 0 && (
+        <View style={expStyles.records}>
+          <View style={[expStyles.recordsDivider, { backgroundColor: accent + '25' }]} />
+          {exp.records.map((record) => (
+            <ExpandableCard
+              key={record.id}
+              record={record}
+              accent={accent}
+              isActive={activeCardId === record.id}
+              isSaved={savedIds.has(record.id)}
+              onToggle={() => {
+                setActiveCardId((id) => (id === record.id ? null : record.id));
+                Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light).catch(() => {});
+              }}
+              onWhyThis={() => setActiveCardId(null)}
+              onConnectCovenant={onPromptPress}
+              onSaveEvidence={() => onSaveEvidence(record)}
+              onDisagree={onPromptPress}
+            />
+          ))}
+        </View>
+      )}
+
+      {/* Prompts from the experience */}
+      <View style={expStyles.prompts}>
+        {exp.prompts.map((prompt) => (
+          <PromptPill
+            key={prompt}
+            label={prompt}
+            accent={accent}
+            onPress={onPromptPress}
+          />
+        ))}
+      </View>
+
+      {/* Dismiss — return to the scored manifestation view */}
+      <TouchableOpacity onPress={onDismiss} style={expStyles.dismiss} hitSlop={8} activeOpacity={0.6}>
+        <Text style={expStyles.dismissText}>← Back to what OATH sees</Text>
+      </TouchableOpacity>
+    </Animated.View>
+  );
+}
+
+const expStyles = StyleSheet.create({
+  container: { gap: spacing.lg },
+  badge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 5,
+    alignSelf: 'flex-start',
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+    borderRadius: radius.full,
+    borderWidth: 1,
+    backgroundColor: 'rgba(255,255,255,0.03)',
+  },
+  badgeGlyph: { fontSize: 12 },
+  badgeLabel: { fontSize: 10, fontWeight: '600', letterSpacing: 1.8 },
+  hook: {
+    fontSize: 28,
+    fontWeight: '400',
+    color: colors.text,
+    lineHeight: 40,
+    letterSpacing: -0.6,
+  },
+  bodyBlock: {
+    borderLeftWidth: 2,
+    paddingLeft: 16,
+    gap: 4,
+  },
+  body: {
+    fontSize: 16,
+    color: colors.textSecondary,
+    lineHeight: 26,
+    letterSpacing: -0.15,
+    fontStyle: 'italic',
+  },
+  pivot: {
+    fontSize: 20,
+    fontWeight: '400',
+    lineHeight: 30,
+    letterSpacing: -0.3,
+  },
+  records: { gap: spacing.sm },
+  recordsDivider: { height: 1, marginBottom: spacing.xs },
+  prompts: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.sm },
+  dismiss: { paddingTop: spacing.sm },
+  dismissText: {
+    fontSize: 13,
+    color: colors.textSubtle,
+    letterSpacing: 0.1,
+  },
+});
 
 // ── Styles ────────────────────────────────────────────────────
 const styles = StyleSheet.create({
