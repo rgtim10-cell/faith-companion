@@ -43,7 +43,7 @@ export function TodayScreen() {
 
   const beats: Beat[] = useMemo(() => {
     const arr: Beat[] = [
-      { kind: 'speak', body: `${greetingWord()}, ${m.greetingName}.`, hold: 2400 },
+      { kind: 'speak', body: `${greetingWord()}.`, hold: 2400 },
       { kind: 'speak', lead: m.lead, body: m.observation, hold: 3800 },
     ];
     // Surface the real covenant promise as the memory beat when available.

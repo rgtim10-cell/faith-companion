@@ -2,6 +2,7 @@ import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import {
   Animated,
   Easing,
+  Modal,
   ScrollView,
   StyleSheet,
   Text,
@@ -36,6 +37,7 @@ import { selectContext } from '@/engine/contextSelectionEngine';
 import type { SelectedContext } from '@/engine/contextSelectionEngine';
 import { CONTENT_TYPE_GLYPH, CONTENT_TYPE_LABEL } from '@/data/curatedContext';
 import type { ContextFeedbackReaction } from '@/data/curatedContext';
+import { DEMO_SEEDS } from '@/data/demoSeeds';
 import type { FeedbackReaction, ManifestationType, MemoryRecord } from '@/data/memoryGraph';
 import {
   manifestationLabel,
@@ -148,7 +150,7 @@ const THEMES: Record<ManifestationType, ManifestationTheme> = {
  * is askable. OATH speaks first; you respond or move on.
  */
 export function OathScreen() {
-  const { covenant, memories, feedback, addFeedback, addMemory, reinforceMemory, isLoading, contextFeedback, addContextFeedback } = useCovenant();
+  const { covenant, memories, feedback, addFeedback, addMemory, reinforceMemory, isLoading, contextFeedback, addContextFeedback, loadDemoSeed } = useCovenant();
   const { yesterday, isSealed } = useDaily();
   const { canPresent, shownTypes, presentExperience } = useTheater();
   const { bannerVisible, pendingIntervention, viewIntervention, dismissIntervention, deferIntervention } = useIntervention();
@@ -173,6 +175,11 @@ export function OathScreen() {
   const [mirrorStatement, setMirrorStatement] = useState<string | null>(null);
   const [contextFeedbackGiven, setContextFeedbackGiven] = useState<ContextFeedbackReaction | null>(null);
   const [contextDismissed, setContextDismissed] = useState(false);
+
+  // Hidden dev panel — 5 taps on the wordmark
+  const demoTapCount = useRef(0);
+  const demoTapTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const [showDemoPanel, setShowDemoPanel] = useState(false);
 
   // OATH's current observational state — computed fresh, shown persistently.
   const oathState = useMemo(
@@ -371,6 +378,18 @@ export function OathScreen() {
     navigation.navigate('NightReflection');
   };
 
+  const handleWordmarkTap = () => {
+    demoTapCount.current += 1;
+    if (demoTapTimer.current) clearTimeout(demoTapTimer.current);
+    if (demoTapCount.current >= 5) {
+      demoTapCount.current = 0;
+      setShowDemoPanel(true);
+      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Heavy).catch(() => {});
+    } else {
+      demoTapTimer.current = setTimeout(() => { demoTapCount.current = 0; }, 800);
+    }
+  };
+
   if (!current) {
     return (
       <View style={styles.root}>
@@ -413,6 +432,39 @@ export function OathScreen() {
         />
       )}
 
+      {/* Demo seed panel — hidden, 5 taps on OATH wordmark */}
+      <Modal
+        visible={showDemoPanel}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setShowDemoPanel(false)}
+      >
+        <View style={styles.demoOverlay}>
+          <View style={styles.demoPanel}>
+            <Text style={styles.demoPanelTitle}>DEMO MODE</Text>
+            <Text style={styles.demoPanelSub}>Select a seed to load. This replaces all current data.</Text>
+            {DEMO_SEEDS.map((seed) => (
+              <TouchableOpacity
+                key={seed.key}
+                style={styles.demaSeedBtn}
+                activeOpacity={0.75}
+                onPress={async () => {
+                  setShowDemoPanel(false);
+                  await loadDemoSeed(seed.covenant, seed.memories);
+                  Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success).catch(() => {});
+                }}
+              >
+                <Text style={styles.demaSeedLabel}>{seed.label}</Text>
+                <Text style={styles.demaSeedDesc}>{seed.description}</Text>
+              </TouchableOpacity>
+            ))}
+            <TouchableOpacity onPress={() => setShowDemoPanel(false)} style={styles.demoCancelBtn}>
+              <Text style={styles.demoCancelText}>Cancel</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+      </Modal>
+
       <ScrollView
         contentContainerStyle={[
           styles.scroll,
@@ -425,7 +477,9 @@ export function OathScreen() {
       >
         {/* Header */}
         <View style={styles.header}>
-          <Text style={styles.wordmark}>OATH</Text>
+          <TouchableOpacity onPress={handleWordmarkTap} activeOpacity={1} hitSlop={12}>
+            <Text style={styles.wordmark}>OATH</Text>
+          </TouchableOpacity>
           <Animated.View style={[styles.typeBadge, { borderColor: theme.accent + '44', opacity: fadeAnim }]}>
             <Text style={[styles.typeBadgeGlyph, { color: theme.accent }]}>{theme.glyph}</Text>
             <Text style={[styles.typeBadgeLabel, { color: theme.accent }]}>
@@ -1592,6 +1646,66 @@ const styles = StyleSheet.create({
     borderWidth: 1,
   },
   actionPillText: { fontSize: 12, fontWeight: '500', letterSpacing: 0.1 },
+  // Demo panel
+  demoOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0,0,0,0.85)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    padding: spacing.xl,
+  },
+  demoPanel: {
+    width: '100%',
+    backgroundColor: '#0E1018',
+    borderRadius: radius.xl,
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.1)',
+    padding: spacing.xl,
+    gap: spacing.md,
+  },
+  demoPanelTitle: {
+    fontSize: 11,
+    fontWeight: '700',
+    letterSpacing: 2.8,
+    color: 'rgba(255,255,255,0.3)',
+    marginBottom: spacing.xs,
+  },
+  demoPanelSub: {
+    fontSize: 13,
+    color: 'rgba(255,255,255,0.35)',
+    lineHeight: 19,
+    marginBottom: spacing.xs,
+  },
+  demaSeedBtn: {
+    borderRadius: radius.md,
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.1)',
+    backgroundColor: 'rgba(255,255,255,0.04)',
+    padding: spacing.md,
+    gap: 4,
+  },
+  demaSeedLabel: {
+    fontSize: 15,
+    fontWeight: '600',
+    color: colors.text,
+    letterSpacing: -0.2,
+  },
+  demaSeedDesc: {
+    fontSize: 12,
+    color: 'rgba(255,255,255,0.35)',
+    lineHeight: 17,
+  },
+  demoCancelBtn: {
+    alignItems: 'center',
+    paddingVertical: spacing.sm,
+    marginTop: spacing.xs,
+  },
+  demoCancelText: {
+    fontSize: 14,
+    color: 'rgba(255,255,255,0.28)',
+    letterSpacing: 0.1,
+  },
+
   savedConfirm: {
     fontSize: 12,
     fontWeight: '500',

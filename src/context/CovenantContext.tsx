@@ -119,6 +119,7 @@ interface CovenantContextValue {
   feedback: ManifestationFeedback[];
   isLoading: boolean;
   createCovenant: (promise: string) => Promise<Covenant>;
+  loadDemoSeed: (covenant: Covenant, memories: MemoryRecord[]) => Promise<void>;
   addMemory: (input: {
     type: MemoryType;
     title: string;
@@ -215,6 +216,19 @@ export function CovenantProvider({ children }: { children: React.ReactNode }) {
     [],
   );
 
+  const loadDemoSeed = useCallback(async (newCovenant: Covenant, newMemories: MemoryRecord[]): Promise<void> => {
+    setCovenant(newCovenant);
+    setMemories(newMemories);
+    setFeedback([]);
+    setContextFeedback([]);
+    await Promise.all([
+      storage.setItem(COVENANT_KEY, JSON.stringify(newCovenant)),
+      storage.setItem(MEMORIES_KEY, JSON.stringify(newMemories)),
+      storage.setItem(FEEDBACK_KEY, JSON.stringify([])),
+      storage.setItem(CONTEXT_FEEDBACK_KEY, JSON.stringify([])),
+    ]);
+  }, []);
+
   const addFeedback = useCallback((input: Omit<ManifestationFeedback, 'date'>) => {
     const f: ManifestationFeedback = { ...input, date: Date.now() };
     setFeedback((prev) => {
@@ -251,8 +265,8 @@ export function CovenantProvider({ children }: { children: React.ReactNode }) {
   }, []);
 
   const value = useMemo(
-    () => ({ covenant, memories, feedback, isLoading, createCovenant, addMemory, addFeedback, reinforceMemory, contextFeedback, addContextFeedback }),
-    [covenant, memories, feedback, isLoading, createCovenant, addMemory, addFeedback, reinforceMemory, contextFeedback, addContextFeedback],
+    () => ({ covenant, memories, feedback, isLoading, createCovenant, loadDemoSeed, addMemory, addFeedback, reinforceMemory, contextFeedback, addContextFeedback }),
+    [covenant, memories, feedback, isLoading, createCovenant, loadDemoSeed, addMemory, addFeedback, reinforceMemory, contextFeedback, addContextFeedback],
   );
 
   return <CovenantContext.Provider value={value}>{children}</CovenantContext.Provider>;
