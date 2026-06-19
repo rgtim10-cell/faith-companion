@@ -36,7 +36,8 @@
     "android": "expo start --android",
     "ios": "expo start --ios",
     "web:setup": "mkdir -p public && cp node_modules/canvaskit-wasm/bin/full/canvaskit.wasm public/canvaskit.wasm",
-    "test:engine": "TS_NODE_PROJECT=tsconfig.test.json TS_NODE_TRANSPILE_ONLY=true node -r /opt/node22/lib/node_modules/ts-node/register -r ./node_modules/tsconfig-paths/register src/engine/__tests__/guidanceEngine.test.ts"
+    "test:engine": "TS_NODE_PROJECT=tsconfig.test.json TS_NODE_TRANSPILE_ONLY=true node -r /opt/node22/lib/node_modules/ts-node/register -r ./node_modules/tsconfig-paths/register src/engine/__tests__/guidanceEngine.test.ts",
+    "test:engine:identity": "TS_NODE_PROJECT=tsconfig.test.json TS_NODE_TRANSPILE_ONLY=true node -r /opt/node22/lib/node_modules/ts-node/register -r ./node_modules/tsconfig-paths/register src/engine/__tests__/identityEngine.test.ts"
   },
   "private": true
 }

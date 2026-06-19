@@ -25,6 +25,8 @@ import {
   findTwinPair,
 } from '@/engine/guidanceEngine';
 import type { GuidanceResponse } from '@/engine/guidanceEngine';
+import { buildIdentityProfile } from '@/engine/identityEngine';
+import type { IdentityProfile } from '@/engine/identityEngine';
 import type { MemoryRecord } from '@/data/memoryGraph';
 import { DEMO_SEEDS } from '@/data/demoSeeds';
 import { colors, spacing } from '@/design/tokens';
@@ -42,6 +44,7 @@ if (Platform.OS === 'web' && typeof document !== 'undefined') {
 // silence:          the sky IS the interface — covenant + memories, tappable.
 // memory:           one star surfaced. The memory speaks, then OATH.
 // mirror:           OATH looks through the record — connections illuminate first.
+// identity:         Level 3 mirror — OATH has observed something. Evidence stars light up.
 // manifestation:    OATH weaves one narrative from the sky.
 // communion:        a ritual. You give OATH your word (speak) or witness (evidence).
 // guidance_recall:  OATH searches the record. Stars surface one by one. The twin arc forms.
@@ -50,6 +53,7 @@ type CanvasState =
   | 'silence'
   | 'memory'
   | 'mirror'
+  | 'identity'
   | 'manifestation'
   | 'communion'
   | 'guidance_recall'
@@ -60,6 +64,7 @@ const SKY_STATE: Record<CanvasState, 'silent' | 'noticing' | 'speaking' | 'remem
   silence: 'silent',
   memory: 'remembering',
   mirror: 'noticing',
+  identity: 'speaking',
   manifestation: 'speaking',
   communion: 'noticing',
   guidance_recall: 'noticing',
@@ -84,6 +89,9 @@ export function ManifestationCanvas() {
   const [followUtterance, setFollowUtterance] = useState('');
   const sequenceTimers = useRef<ReturnType<typeof setTimeout>[]>([]);
 
+  // Identity state
+  const [identityProfile, setIdentityProfile] = useState<IdentityProfile | null>(null);
+
   const intensity = useRef(new Animated.Value(0.06)).current;
   const fade = useRef(new Animated.Value(1)).current;
 
@@ -105,6 +113,7 @@ export function ManifestationCanvas() {
   const highlightIds = useMemo(() => {
     if (state === 'memory' && selectedId) return [selectedId];
     if (state === 'manifestation') return composed?.records.map((r) => r.id) ?? [];
+    if (state === 'identity') return guidanceHighlights;
     if (state === 'guidance_recall' || state === 'guidance_speak') return guidanceHighlights;
     return [];
   }, [state, selectedId, composed, guidanceHighlights]);
@@ -163,9 +172,22 @@ export function ManifestationCanvas() {
     // The sky responds first; only after OATH has looked does it speak.
     if (mirrorTimer.current) clearTimeout(mirrorTimer.current);
     mirrorTimer.current = setTimeout(() => {
-      const exp = composeExperience(covenant, memories, 'auto');
-      crossfade(() => { setComposed(exp); setState('manifestation'); });
-      breatheTo(0.28);
+      const profile = buildIdentityProfile(covenant, memories);
+      if (profile.mirrorLevel === 3 && profile.mirrorObservation) {
+        // Level 3: OATH has observed identity — evidence stars light the sky.
+        setIdentityProfile(profile);
+        const evidenceIds = [
+          ...(profile.dominantStrength?.evidenceIds ?? []),
+          ...(profile.dominantStruggle?.evidenceIds ?? []),
+        ];
+        setGuidanceHighlights([...new Set(evidenceIds)].slice(0, 6));
+        crossfade(() => setState('identity'));
+        breatheTo(0.28);
+      } else {
+        const exp = composeExperience(covenant, memories, 'auto');
+        crossfade(() => { setComposed(exp); setState('manifestation'); });
+        breatheTo(0.28);
+      }
     }, 1600);
   };
 
@@ -182,6 +204,7 @@ export function ManifestationCanvas() {
       setGuidanceHighlights([]);
       setTwinIds(null);
       setFollowUtterance('');
+      setIdentityProfile(null);
       setState('silence');
     });
     breatheTo(0.06);
@@ -342,6 +365,16 @@ export function ManifestationCanvas() {
 
         {(state === 'mirror' || state === 'guidance_recall') && <MirrorField />}
 
+        {state === 'identity' && (
+          <IdentityMirrorField
+            profile={identityProfile}
+            H={H}
+            onReturn={toSilence}
+            onSpeak={() => toCommunion('speak')}
+            insetBottom={insets.bottom}
+          />
+        )}
+
         {state === 'manifestation' && (
           <ManifestationField
             exp={composed}
@@ -461,6 +494,60 @@ function MirrorField() {
   return (
     <View style={styles.fill} pointerEvents="none">
       <Animated.Text style={[styles.mirrorDots, { opacity: dots }]}>· · ·</Animated.Text>
+    </View>
+  );
+}
+
+// ── IDENTITY MIRROR ─────────────────────────────────────────────────────────────
+// Level 3: OATH has watched long enough to observe identity. Not a summary —
+// an observation. Evidence stars are already glowing in the sky above.
+function IdentityMirrorField({
+  profile,
+  H,
+  onReturn,
+  onSpeak,
+  insetBottom,
+}: {
+  profile: IdentityProfile | null;
+  H: number;
+  onReturn: () => void;
+  onSpeak: () => void;
+  insetBottom: number;
+}) {
+  const opacity = useRef(new Animated.Value(0)).current;
+
+  useEffect(() => {
+    opacity.setValue(0);
+    Animated.timing(opacity, {
+      toValue: 1, duration: 900, delay: 300,
+      easing: Easing.out(Easing.quad), useNativeDriver: true,
+    }).start();
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [profile?.mirrorObservation]);
+
+  if (!profile?.mirrorObservation) {
+    return <Pressable style={styles.fill} onPress={onReturn} />;
+  }
+
+  const { mirrorObservation, dominantStrength, dominantStruggle, covenantAlignment } = profile;
+  const secondary = dominantStrength?.oathObservation ?? dominantStruggle?.oathObservation ?? '';
+
+  return (
+    <View style={styles.fill}>
+      <Pressable style={styles.fill} onPress={onReturn} />
+      <Animated.View
+        style={[styles.identityHold, { paddingTop: H * 0.16 }, { opacity }]}
+        pointerEvents="none"
+      >
+        <Text style={styles.identityObservation}>{mirrorObservation}</Text>
+        {!!secondary && (
+          <Text style={styles.identitySecondary}>{secondary}</Text>
+        )}
+        <Text style={styles.identityAlignment}>{covenantAlignment.oathObservation}</Text>
+      </Animated.View>
+      <View style={[styles.identityGlyph, { bottom: insetBottom + spacing.xl }]} pointerEvents="box-none">
+        <Pressable onPress={onSpeak} hitSlop={28}><Text style={styles.glyphDim}>◌</Text></Pressable>
+      </View>
     </View>
   );
 }
@@ -675,6 +762,13 @@ const styles = StyleSheet.create({
 
   // Mirror
   mirrorDots: { position: 'absolute', alignSelf: 'center', top: '52%', fontSize: 20, letterSpacing: 6, color: colors.text },
+
+  // Identity Mirror (Level 3)
+  identityHold: { flex: 1, paddingHorizontal: spacing.xl, gap: spacing.xl },
+  identityObservation: { fontSize: 24, lineHeight: 38, color: colors.text, fontWeight: '300', letterSpacing: -0.5 },
+  identitySecondary: { fontSize: 16, lineHeight: 26, color: 'rgba(255,255,255,0.52)', letterSpacing: -0.1 },
+  identityAlignment: { fontSize: 14, lineHeight: 23, color: 'rgba(255,255,255,0.30)', fontStyle: 'italic', letterSpacing: 0.1 },
+  identityGlyph: { position: 'absolute', left: spacing.xl },
 
   // Manifestation
   manifest: { flex: 1, paddingHorizontal: spacing.xl, gap: spacing.lg },
