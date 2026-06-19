@@ -14,6 +14,8 @@ interface MemorySkyProps {
   /** Memory IDs whose stars should brighten — OATH is referencing them. */
   highlightIds?: string[];
   skyState?: SkyState;
+  /** Emotional-twin arc: [struggle.id, breakthrough.id] — gold path forms between them. */
+  twinIds?: [string, string];
   /** Tap a star to surface that memory. When set, the sky becomes interactive. */
   onSelectStar?: (id: string) => void;
 }
@@ -33,6 +35,7 @@ export function MemorySky({
   covenant,
   highlightIds,
   skyState = 'silent',
+  twinIds,
   onSelectStar,
 }: MemorySkyProps) {
   const { width: W, height: H } = useWindowDimensions();
@@ -93,6 +96,24 @@ export function MemorySky({
             />
           );
         })}
+
+        {/* Emotional twin arc — gold path between struggle and the breakthrough that answered it */}
+        {twinIds && (() => {
+          const [aId, bId] = twinIds;
+          const a = stars.find((s) => s.id === aId);
+          const b = stars.find((s) => s.id === bId);
+          if (!a || !b) return null;
+          const pulse = Math.sin(time * 1.5) * 0.18 + 0.38;
+          const glow = Math.sin(time * 1.5 + 1) * 0.22 + 0.28;
+          return (
+            <React.Fragment>
+              <Line x1={a.cx} y1={a.cy} x2={b.cx} y2={b.cy}
+                strokeWidth={1.2} stroke="#F4D58A" strokeOpacity={pulse} />
+              <Circle cx={a.cx} cy={a.cy} r={a.r * 4.5} fill="#F87171" opacity={glow * 0.5} />
+              <Circle cx={b.cx} cy={b.cy} r={b.r * 4.5} fill="#FBBF24" opacity={glow * 0.5} />
+            </React.Fragment>
+          );
+        })()}
 
         {/* Stars — every memory is a light in the sky */}
         {stars.map((star) => {

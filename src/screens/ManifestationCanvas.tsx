@@ -18,6 +18,13 @@ import { Atmosphere } from '@/components/layout/Atmosphere';
 import { useCovenant } from '@/context/CovenantContext';
 import { composeExperience } from '@/engine/composer';
 import type { ComposedExperience } from '@/engine/composerTypes';
+import {
+  retrieveForGuidance,
+  parseUtterance,
+  isGuidanceUtterance,
+  findTwinPair,
+} from '@/engine/guidanceEngine';
+import type { GuidanceResponse } from '@/engine/guidanceEngine';
 import type { MemoryRecord } from '@/data/memoryGraph';
 import { DEMO_SEEDS } from '@/data/demoSeeds';
 import { colors, spacing } from '@/design/tokens';
@@ -32,21 +39,32 @@ if (Platform.OS === 'web' && typeof document !== 'undefined') {
   document.head.appendChild(s);
 }
 
-// silence:       the sky IS the interface — covenant + memories, tappable.
-// memory:        one star surfaced. The memory speaks, then OATH.
-// mirror:        OATH looks through the record — connections illuminate first.
-// manifestation: OATH weaves one narrative from the sky.
-// communion:     a ritual. You give OATH your word (speak) or witness (evidence).
-type CanvasState = 'silence' | 'memory' | 'mirror' | 'manifestation' | 'communion';
+// silence:          the sky IS the interface — covenant + memories, tappable.
+// memory:           one star surfaced. The memory speaks, then OATH.
+// mirror:           OATH looks through the record — connections illuminate first.
+// manifestation:    OATH weaves one narrative from the sky.
+// communion:        a ritual. You give OATH your word (speak) or witness (evidence).
+// guidance_recall:  OATH searches the record. Stars surface one by one. The twin arc forms.
+// guidance_speak:   OATH speaks from memory. Follow-up input stays open.
+type CanvasState =
+  | 'silence'
+  | 'memory'
+  | 'mirror'
+  | 'manifestation'
+  | 'communion'
+  | 'guidance_recall'
+  | 'guidance_speak';
 type CommunionMode = 'speak' | 'evidence';
 
-const SKY_STATE = {
+const SKY_STATE: Record<CanvasState, 'silent' | 'noticing' | 'speaking' | 'remembering'> = {
   silence: 'silent',
   memory: 'remembering',
   mirror: 'noticing',
   manifestation: 'speaking',
   communion: 'noticing',
-} as const;
+  guidance_recall: 'noticing',
+  guidance_speak: 'speaking',
+};
 
 export function ManifestationCanvas() {
   const { covenant, memories, addMemory, loadDemoSeed } = useCovenant();
@@ -58,6 +76,13 @@ export function ManifestationCanvas() {
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [utterance, setUtterance] = useState('');
   const [communionMode, setCommunionMode] = useState<CommunionMode>('speak');
+
+  // Guidance state
+  const [guidanceResponse, setGuidanceResponse] = useState<GuidanceResponse | null>(null);
+  const [guidanceHighlights, setGuidanceHighlights] = useState<string[]>([]);
+  const [twinIds, setTwinIds] = useState<[string, string] | null>(null);
+  const [followUtterance, setFollowUtterance] = useState('');
+  const sequenceTimers = useRef<ReturnType<typeof setTimeout>[]>([]);
 
   const intensity = useRef(new Animated.Value(0.06)).current;
   const fade = useRef(new Animated.Value(1)).current;
@@ -80,8 +105,9 @@ export function ManifestationCanvas() {
   const highlightIds = useMemo(() => {
     if (state === 'memory' && selectedId) return [selectedId];
     if (state === 'manifestation') return composed?.records.map((r) => r.id) ?? [];
+    if (state === 'guidance_recall' || state === 'guidance_speak') return guidanceHighlights;
     return [];
-  }, [state, selectedId, composed]);
+  }, [state, selectedId, composed, guidanceHighlights]);
 
   const startGlyphBreath = useCallback(() => {
     glyphScale.setValue(1.0);
@@ -109,6 +135,7 @@ export function ManifestationCanvas() {
   }, [state, startGlyphBreath]);
 
   useEffect(() => () => { if (mirrorTimer.current) clearTimeout(mirrorTimer.current); }, []);
+  useEffect(() => () => { sequenceTimers.current.forEach(clearTimeout); }, []);
 
   const breatheTo = (value: number, duration = 1400) =>
     Animated.timing(intensity, { toValue: value, duration, easing: Easing.inOut(Easing.quad), useNativeDriver: true }).start();
@@ -143,12 +170,18 @@ export function ManifestationCanvas() {
   };
 
   const toSilence = () => {
+    sequenceTimers.current.forEach(clearTimeout);
+    sequenceTimers.current = [];
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light).catch(() => {});
     crossfade(() => {
       setComposed(null);
       setSelectedId(null);
       setUtterance('');
       setCommunionMode('speak');
+      setGuidanceResponse(null);
+      setGuidanceHighlights([]);
+      setTwinIds(null);
+      setFollowUtterance('');
       setState('silence');
     });
     breatheTo(0.06);
@@ -160,21 +193,104 @@ export function ManifestationCanvas() {
     breatheTo(0.18);
   };
 
+  const runGuidanceSequence = (text: string) => {
+    // Clear any in-progress sequence
+    sequenceTimers.current.forEach(clearTimeout);
+    sequenceTimers.current = [];
+    setGuidanceHighlights([]);
+    setTwinIds(null);
+
+    // Transition to recall — sky quiets, connections illuminate
+    crossfade(() => setState('guidance_recall'));
+    breatheTo(0.18);
+
+    // Retrieval is pure and synchronous — run it immediately
+    const response = retrieveForGuidance(text, covenant, memories);
+    setGuidanceResponse(response);
+
+    const ids = response.ranked.map((r) => r.memory.id);
+    const twin = findTwinPair(response.ranked, memories);
+
+    // Stars surface one by one — 500ms apart
+    let delay = 400;
+    ids.forEach((id) => {
+      delay += 500;
+      const t = setTimeout(() => {
+        setGuidanceHighlights((prev) => [...new Set([...prev, id])]);
+      }, delay);
+      sequenceTimers.current.push(t);
+    });
+
+    // Emotional twin arc: struggle pulses red, path forms to breakthrough
+    if (twin) {
+      delay += 700;
+      const twinTimer = setTimeout(() => {
+        setTwinIds(twin);
+        setGuidanceHighlights((prev) => [...new Set([...prev, twin[0], twin[1]])]);
+      }, delay);
+      sequenceTimers.current.push(twinTimer);
+      delay += 1000;
+    } else {
+      delay += 500;
+    }
+
+    // OATH pauses, then speaks
+    const speakTimer = setTimeout(() => {
+      crossfade(() => setState('guidance_speak'));
+      breatheTo(0.22);
+    }, delay);
+    sequenceTimers.current.push(speakTimer);
+  };
+
   const speak = () => {
     const text = utterance.trim();
-    if (text.length > 0) {
-      addMemory({
-        type: communionMode === 'evidence' ? 'evidence' : 'reflection',
-        title: communionMode === 'evidence' ? 'Witnessed' : 'Spoken to OATH',
-        content: text,
-        source: 'night_reflection',
-        linkedPromiseId: covenant?.id,
-        emotionalWeight: communionMode === 'evidence' ? 0.75 : 0.6,
-      });
-      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success).catch(() => {});
+    if (!text) return;
+
+    const parsed = parseUtterance(text, memories);
+
+    if (isGuidanceUtterance(parsed)) {
+      setUtterance('');
+      runGuidanceSequence(text);
+      return;
     }
+
+    // Save as memory record
+    addMemory({
+      type: communionMode === 'evidence' ? 'evidence' : 'reflection',
+      title: communionMode === 'evidence' ? 'Witnessed' : 'Spoken to OATH',
+      content: text,
+      source: 'night_reflection',
+      linkedPromiseId: covenant?.id,
+      emotionalWeight: communionMode === 'evidence' ? 0.75 : 0.6,
+    });
+    Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success).catch(() => {});
     setUtterance('');
     toSilence();
+  };
+
+  const speakFollowUp = () => {
+    const text = followUtterance.trim();
+    if (!text) { toSilence(); return; }
+
+    if (guidanceResponse && !guidanceResponse.hasMemory) {
+      // Memory birth: save the first record, then return to silence — the new star appears
+      addMemory({
+        type: 'reflection',
+        title: 'First memory',
+        content: text,
+        source: 'communion',
+        linkedPromiseId: covenant?.id,
+        emotionalWeight: 0.65,
+      });
+      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success).catch(() => {});
+      setFollowUtterance('');
+      toSilence();
+      return;
+    }
+
+    // Continue the conversation — re-run retrieval from the follow-up utterance
+    setFollowUtterance('');
+    runGuidanceSequence(text);
   };
 
   const onHotCorner = () => {
@@ -200,6 +316,7 @@ export function ManifestationCanvas() {
           covenant={covenant}
           highlightIds={highlightIds}
           skyState={SKY_STATE[state]}
+          twinIds={twinIds ?? undefined}
           onSelectStar={state === 'silence' ? onSelectStar : undefined}
         />
       </Suspense>
@@ -223,7 +340,7 @@ export function ManifestationCanvas() {
           <MemoryField memory={selectedMemory} H={H} onReturn={toSilence} />
         )}
 
-        {state === 'mirror' && <MirrorField />}
+        {(state === 'mirror' || state === 'guidance_recall') && <MirrorField />}
 
         {state === 'manifestation' && (
           <ManifestationField
@@ -245,6 +362,17 @@ export function ManifestationCanvas() {
             onModeToggle={() => setCommunionMode((m) => (m === 'speak' ? 'evidence' : 'speak'))}
             onSpeak={speak}
             onCancel={toSilence}
+            insetBottom={insets.bottom}
+          />
+        )}
+
+        {state === 'guidance_speak' && (
+          <GuidanceSpeakField
+            response={guidanceResponse}
+            followText={followUtterance}
+            onFollowChange={setFollowUtterance}
+            onSpeak={speakFollowUp}
+            onReturn={toSilence}
             insetBottom={insets.bottom}
           />
         )}
@@ -435,6 +563,93 @@ function CommunionField({
   );
 }
 
+// ── GUIDANCE SPEAK ──────────────────────────────────────────────────────────────
+// OATH has searched. Now it speaks — from memory, not from inference.
+// The sky stays alive with retrieved stars. The prose arrives as one thought.
+// A follow-up input waits at the bottom; tapping sky returns to silence.
+function GuidanceSpeakField({
+  response,
+  followText,
+  onFollowChange,
+  onSpeak,
+  onReturn,
+  insetBottom,
+}: {
+  response: GuidanceResponse | null;
+  followText: string;
+  onFollowChange: (s: string) => void;
+  onSpeak: () => void;
+  onReturn: () => void;
+  insetBottom: number;
+}) {
+  const prose = response?.prose ?? '· · ·';
+  const isFallback = response ? !response.hasMemory : false;
+  const hasText = followText.trim().length > 0;
+
+  const proseOpacity = useRef(new Animated.Value(0)).current;
+  const inputOpacity = useRef(new Animated.Value(0)).current;
+  const giveAnim = useRef(new Animated.Value(0.15)).current;
+
+  useEffect(() => {
+    proseOpacity.setValue(0);
+    inputOpacity.setValue(0);
+    Animated.sequence([
+      Animated.timing(proseOpacity, {
+        toValue: 1, duration: 700, delay: 200,
+        easing: Easing.out(Easing.quad), useNativeDriver: true,
+      }),
+      Animated.timing(inputOpacity, {
+        toValue: 1, duration: 500,
+        easing: Easing.out(Easing.quad), useNativeDriver: true,
+      }),
+    ]).start();
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [prose]);
+
+  useEffect(() => {
+    Animated.timing(giveAnim, {
+      toValue: hasText ? 0.85 : 0.15, duration: 300, useNativeDriver: true,
+    }).start();
+  }, [hasText, giveAnim]);
+
+  return (
+    <View style={styles.fill}>
+      {/* Upper sky — tap to return */}
+      <Pressable style={styles.fill} onPress={onReturn} />
+
+      {/* OATH speaks — bottom of screen, sky visible above */}
+      <View
+        style={[styles.guidanceContent, { paddingBottom: insetBottom + spacing.xl }]}
+        pointerEvents="box-none"
+      >
+        <Animated.Text style={[styles.guidanceProse, { opacity: proseOpacity }]} pointerEvents="none">
+          {prose}
+        </Animated.Text>
+
+        <Animated.View style={[styles.guidanceInputRow, { opacity: inputOpacity }]} pointerEvents="box-none">
+          <TextInput
+            // eslint-disable-next-line @typescript-eslint/no-explicit-any
+            style={[styles.guidanceInputText, { outline: 'none', border: 'none', borderWidth: 0, boxShadow: 'none' } as any]}
+            value={followText}
+            onChangeText={onFollowChange}
+            placeholder={isFallback ? 'What would you want to remember?' : 'Continue…'}
+            placeholderTextColor="rgba(255,255,255,0.20)"
+            multiline
+            caretHidden
+            keyboardAppearance="dark"
+            selectionColor="rgba(255,255,255,0.25)"
+          />
+          <Animated.View style={{ opacity: giveAnim }}>
+            <Pressable onPress={onSpeak} hitSlop={20} disabled={!hasText}>
+              <Text style={styles.guidanceGive}>give OATH your word</Text>
+            </Pressable>
+          </Animated.View>
+        </Animated.View>
+      </View>
+    </View>
+  );
+}
+
 const styles = StyleSheet.create({
   root: { flex: 1, backgroundColor: '#04050A' },
   fill: { position: 'absolute', top: 0, left: 0, right: 0, bottom: 0 },
@@ -477,6 +692,49 @@ const styles = StyleSheet.create({
   communionBack: { fontSize: 13, color: 'rgba(255,255,255,0.22)', letterSpacing: 0.3 },
   communionModeGlyph: { fontSize: 18, color: 'rgba(255,255,255,0.20)' },
   communionGive: { fontSize: 14, color: colors.text, letterSpacing: 0.3 },
+
+  // Guidance speak
+  guidanceContent: {
+    position: 'absolute',
+    left: 0,
+    right: 0,
+    bottom: 0,
+    paddingHorizontal: spacing.xl,
+    paddingTop: spacing.xl,
+    gap: spacing.lg,
+  },
+  guidanceProse: {
+    fontSize: 20,
+    lineHeight: 33,
+    color: 'rgba(255,255,255,0.82)',
+    fontWeight: '300',
+    letterSpacing: -0.35,
+  },
+  guidanceInputRow: {
+    flexDirection: 'row',
+    alignItems: 'flex-end',
+    gap: spacing.md,
+    borderTopWidth: StyleSheet.hairlineWidth,
+    borderTopColor: 'rgba(255,255,255,0.08)',
+    paddingTop: spacing.md,
+    minHeight: 48,
+  },
+  guidanceInputText: {
+    flex: 1,
+    fontSize: 17,
+    lineHeight: 26,
+    color: colors.text,
+    fontWeight: '300',
+    letterSpacing: -0.3,
+    maxHeight: 80,
+    paddingVertical: 0,
+  },
+  guidanceGive: {
+    fontSize: 14,
+    color: colors.text,
+    letterSpacing: 0.3,
+    paddingBottom: 2,
+  },
 
   // Seed loader (experiment only)
   seedOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.85)', justifyContent: 'center', padding: spacing.xl },

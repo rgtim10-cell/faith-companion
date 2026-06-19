@@ -45,6 +45,8 @@ export interface GuidanceResponse {
   connect: string;
   /** Question that opens them further */
   question: string;
+  /** Time-aware continuous prose for display — RECALL + twin bridge + CONNECT + QUESTION */
+  prose: string;
   intent: UtteranceIntent;
   emotional: EmotionalSignal;
   /** Resonance groups that illuminate this moment */
@@ -350,11 +352,14 @@ export function retrieveForGuidance(
   const hasMemory = top.length > 0;
 
   if (!hasMemory) {
+    const fallbackConnect = "OATH doesn't have anything from your past that speaks to this yet.";
+    const fallbackQuestion = 'What would you want to remember about this moment?';
     return {
       ranked: [],
       recall: '',
-      connect: "OATH doesn't have anything from your past that speaks to this yet.",
-      question: 'What would you want to remember about this moment?',
+      connect: fallbackConnect,
+      question: fallbackQuestion,
+      prose: `${fallbackConnect}\n\n${fallbackQuestion}`,
       intent: parsed.intent,
       emotional: parsed.emotional,
       resonance: resonanceGroups.slice(0, 2),
@@ -363,13 +368,15 @@ export function retrieveForGuidance(
   }
 
   const primary = top[0];
-  const { recall, connect, question } = compose(primary, parsed, top, covenant);
+  const { recall, connect, question } = compose(primary, parsed, top, covenant, now);
+  const prose = composeProse(primary, recall, connect, question, memories, now);
 
   return {
     ranked: top,
     recall,
     connect,
     question,
+    prose,
     intent: parsed.intent,
     emotional: parsed.emotional,
     resonance: resonanceGroups.slice(0, 2),
@@ -384,16 +391,29 @@ function excerpt(text: string, max = 100): string {
   return t.length <= max ? t : `${t.slice(0, max).trimEnd()}…`;
 }
 
-function recallLine(mem: MemoryRecord): string {
+function timeLabel(mem: MemoryRecord, now: number): string {
+  const days = Math.round((now - mem.date) / DAY);
+  if (days === 0)   return 'Today';
+  if (days === 1)   return 'Yesterday';
+  if (days < 7)     return `${days} days ago`;
+  if (days < 14)    return 'Last week';
+  if (days < 30)    return `${Math.round(days / 7)} weeks ago`;
+  if (days < 60)    return 'A month ago';
+  return `${Math.round(days / 30)} months ago`;
+}
+
+function recallLine(mem: MemoryRecord, now = Date.now()): string {
+  const when = timeLabel(mem, now);
+  const q = excerpt(mem.content);
   switch (mem.type) {
-    case 'evidence':     return `You showed up for this. You wrote: "${excerpt(mem.content)}"`;
-    case 'struggle':     return `You were honest about this. You said: "${excerpt(mem.content)}"`;
-    case 'breakthrough': return `You broke through. You wrote: "${excerpt(mem.content)}"`;
-    case 'truth':        return `You named this. You said: "${excerpt(mem.content)}"`;
-    case 'reflection':   return `You said into the dark: "${excerpt(mem.content)}"`;
-    case 'pattern':      return `You saw this pattern forming. You wrote: "${excerpt(mem.content)}"`;
-    case 'promise':      return `Your word: "${excerpt(mem.content)}"`;
-    default:             return `You recorded this: "${excerpt(mem.content)}"`;
+    case 'evidence':     return `${when}, you showed up. You wrote:\n\n"${q}"`;
+    case 'struggle':     return `${when}, you were honest. You wrote:\n\n"${q}"`;
+    case 'breakthrough': return `${when}, you broke through. You wrote:\n\n"${q}"`;
+    case 'truth':        return `${when}, you named this. You said:\n\n"${q}"`;
+    case 'reflection':   return `${when}, you said into the dark:\n\n"${q}"`;
+    case 'pattern':      return `${when}, you saw this forming. You wrote:\n\n"${q}"`;
+    case 'promise':      return `Your word:\n\n"${q}"`;
+    default:             return `${when}, you recorded:\n\n"${q}"`;
   }
 }
 
@@ -478,15 +498,91 @@ function questionLine(primary: RankedMemory, parsed: ParsedUtterance): string {
   }
 }
 
+function composeProse(
+  primary: RankedMemory,
+  recall: string,
+  connect: string,
+  question: string,
+  allMemories: MemoryRecord[],
+  now: number,
+): string {
+  const parts: string[] = [recall];
+
+  if (primary.link === 'emotional_twin') {
+    const struggle = primary.memory;
+    const breakthrough = allMemories.find(
+      (m) =>
+        m.type === 'breakthrough' &&
+        m.date > struggle.date &&
+        m.tags.some((t) => struggle.tags.map((s) => s.toLowerCase()).includes(t.toLowerCase())),
+    );
+    if (breakthrough) {
+      const btDays = Math.round((breakthrough.date - struggle.date) / DAY);
+      const bridge =
+        btDays <= 1 ? 'The next day'
+        : btDays < 7 ? `${btDays} days later`
+        : `${Math.round(btDays / 7)} weeks later`;
+      parts.push(`${bridge}, you recorded a breakthrough:\n\n"${excerpt(breakthrough.content)}"`);
+    }
+  }
+
+  parts.push(connect);
+  parts.push(question);
+  return parts.join('\n\n');
+}
+
 function compose(
   primary: RankedMemory,
   parsed: ParsedUtterance,
   all: RankedMemory[],
   covenant: Covenant | null,
+  now: number,
 ): { recall: string; connect: string; question: string } {
   return {
-    recall: recallLine(primary.memory),
+    recall: recallLine(primary.memory, now),
     connect: connectLine(primary, parsed, all, covenant),
     question: questionLine(primary, parsed),
   };
+}
+
+// ── UI helpers ────────────────────────────────────────────────────────────────
+
+/**
+ * True when the utterance should route to the Guidance experience rather than
+ * saving as a memory record. Guidance = OATH searches first, then speaks.
+ */
+export function isGuidanceUtterance(parsed: ParsedUtterance): boolean {
+  if (parsed.intent === 'vent') return true;
+  if (parsed.intent === 'decide') return true;
+  if (parsed.intent === 'seek_accountability') return true;
+  if (parsed.intent === 'celebrate') return false;
+
+  const text = parsed.raw.toLowerCase();
+  const REQUEST_PHRASES = [
+    'help', 'show me', 'what do you see', 'what do you have', 'motivat',
+    'remind me', 'guide me', 'need to decide', 'not sure', 'lost',
+  ];
+  return REQUEST_PHRASES.some((p) => text.includes(p));
+}
+
+/**
+ * Return the [struggle.id, breakthrough.id] pair for the emotional-twin arc,
+ * or null if no twin was found. Used by the canvas to draw the illuminated
+ * path between the two stars before OATH speaks.
+ */
+export function findTwinPair(
+  ranked: RankedMemory[],
+  allMemories: MemoryRecord[],
+): [string, string] | null {
+  const twin = ranked.find((r) => r.link === 'emotional_twin');
+  if (!twin) return null;
+
+  const struggle = twin.memory;
+  const breakthrough = allMemories.find(
+    (m) =>
+      m.type === 'breakthrough' &&
+      m.date > struggle.date &&
+      m.tags.some((t) => struggle.tags.map((s) => s.toLowerCase()).includes(t.toLowerCase())),
+  );
+  return breakthrough ? [struggle.id, breakthrough.id] : null;
 }
