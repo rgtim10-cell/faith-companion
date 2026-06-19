@@ -33,6 +33,7 @@ import { DEMO_SEEDS } from '@/data/demoSeeds';
 import { colors, spacing } from '@/design/tokens';
 
 const MemorySky = React.lazy(() => import('@/components/ui/MemorySky'));
+const ParticleField = React.lazy(() => import('@/components/ui/ParticleField'));
 
 // Remove browser focus ring on web — textarea:focus outline is a web artifact.
 // Native (iOS/Android) is unaffected.
@@ -69,6 +70,20 @@ const SKY_STATE: Record<CanvasState, 'silent' | 'noticing' | 'speaking' | 'remem
   manifestation: 'speaking',
   communion: 'noticing',
   guidance_recall: 'noticing',
+  guidance_speak: 'speaking',
+};
+
+// What OATH is *doing* drives how its resting particle field moves (directive
+// §1/§7). silence → rest; OATH looking through the record → gather inward;
+// OATH speaking → field opens & brightens; a single memory held → field stills.
+const FIELD_MODE: Record<CanvasState, 'rest' | 'gather' | 'speaking' | 'still'> = {
+  silence: 'rest',
+  memory: 'still',
+  mirror: 'gather',
+  identity: 'speaking',
+  manifestation: 'speaking',
+  communion: 'gather',
+  guidance_recall: 'gather',
   guidance_speak: 'speaking',
 };
 
@@ -365,6 +380,11 @@ export function ManifestationCanvas() {
       {state === 'silence' && (
         <Pressable style={styles.fill} onPress={enterMirror} />
       )}
+
+      {/* OATH's resting body — the living particle field beneath the record. */}
+      <Suspense fallback={null}>
+        <ParticleField mode={FIELD_MODE[state]} />
+      </Suspense>
 
       <Suspense fallback={null}>
         <MemorySky
