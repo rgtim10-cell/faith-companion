@@ -1,20 +1,48 @@
+import 'react-native-gesture-handler';
+import React from 'react';
+import { NavigationContainer, DarkTheme } from '@react-navigation/native';
+import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { StatusBar } from 'expo-status-bar';
-import { StyleSheet, Text, View } from 'react-native';
+import { RealmProvider } from '@/context/RealmContext';
+import { CovenantProvider } from '@/context/CovenantContext';
+import { IdentityProvider } from '@/context/IdentityContext';
+import { DailyProvider } from '@/context/DailyContext';
+import { TheaterProvider } from '@/context/TheaterContext';
+import { InterventionProvider } from '@/context/InterventionContext';
+import { RootNavigator } from '@/navigation/RootNavigator';
+
+const navTheme = {
+  ...DarkTheme,
+  colors: {
+    ...DarkTheme.colors,
+    background: 'transparent',
+    card: 'transparent',
+    border: 'transparent',
+  },
+};
 
 export default function App() {
+  // Skia is native-only here. On web, SkiaOrb and MemorySky resolve to their
+  // .web.tsx fallbacks (react-native-svg), so CanvasKit (WASM) is never loaded
+  // and there is no WASM bootstrap to wait on.
   return (
-    <View style={styles.container}>
-      <Text>Open up App.tsx to start working on your app!</Text>
-      <StatusBar style="auto" />
-    </View>
+    <SafeAreaProvider>
+      <RealmProvider>
+        <CovenantProvider>
+          <IdentityProvider>
+            <DailyProvider>
+              <TheaterProvider>
+                <InterventionProvider>
+                  <NavigationContainer theme={navTheme}>
+                    <StatusBar style="light" />
+                    <RootNavigator />
+                  </NavigationContainer>
+                </InterventionProvider>
+              </TheaterProvider>
+            </DailyProvider>
+          </IdentityProvider>
+        </CovenantProvider>
+      </RealmProvider>
+    </SafeAreaProvider>
   );
 }
-
-const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: '#fff',
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-});
