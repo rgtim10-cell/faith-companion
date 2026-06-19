@@ -296,6 +296,102 @@ section('EvidenceIds: every trait is traceable');
   }
 }
 
+// ── Phase 7: Identity Safety ───────────────────────────────────────────────
+
+section('Phase 7: Challenge penalty reduces confidence by 0.70×');
+{
+  const baseline = buildIdentityProfile(month3Cov, month3Mems);
+  const challenged = buildIdentityProfile(month3Cov, month3Mems, { challengedTraitIds: ['consistency'] });
+
+  const baseConsistency = baseline.strengths.find((t) => t.id === 'consistency');
+  const challConsistency = challenged.strengths.find((t) => t.id === 'consistency');
+
+  ok(!!baseConsistency, 'Challenge: baseline has consistency trait');
+  if (baseConsistency && challConsistency) {
+    const ratio = challConsistency.confidence / baseConsistency.confidence;
+    ok(Math.abs(ratio - 0.70) < 0.01, `Challenge: confidence ratio ≈ 0.70× (got ${ratio.toFixed(3)})`);
+  } else if (baseConsistency && !challConsistency) {
+    // Trait fell below surface threshold after penalty — valid outcome
+    ok(true, 'Challenge: consistency dropped below surface threshold after 0.70× penalty');
+  } else {
+    ok(false, 'Challenge: unexpected state — baseline consistency missing');
+  }
+}
+
+section('Phase 7: Suppression removes trait entirely');
+{
+  const baseline = buildIdentityProfile(month3Cov, month3Mems);
+  const suppressed = buildIdentityProfile(month3Cov, month3Mems, { suppressedTraitIds: ['consistency'] });
+
+  const baseHas = !!baseline.strengths.find((t) => t.id === 'consistency');
+  ok(baseHas, 'Suppression: baseline has consistency trait');
+  ok(!suppressed.strengths.find((t) => t.id === 'consistency'), 'Suppression: consistency absent from strengths');
+  ok(!suppressed.struggles.find((t) => t.id === 'consistency'), 'Suppression: consistency absent from struggles');
+}
+
+section('Phase 7: Confidence language tiers');
+{
+  // HIGH (≥ 0.60): reinforcement scenario — courage has high evidence density
+  const highProfile = buildIdentityProfile(reinforceCov, reinforceMems);
+  const courageTrait = highProfile.strengths.find((t) => t.id === 'courage');
+  ok(!!courageTrait, 'Confidence tiers: courage detected in reinforcement scenario');
+  if (courageTrait) {
+    ok(courageTrait.confidence >= 0.60, `Confidence tiers: courage is HIGH (${courageTrait.confidence.toFixed(3)} ≥ 0.60)`);
+    ok(
+      courageTrait.oathObservation.startsWith('This pattern has become difficult to ignore.'),
+      `Confidence tiers: HIGH → "This pattern has become difficult to ignore."`,
+    );
+  }
+
+  // MEDIUM ([0.42, 0.60)): find a trait in that range from month3
+  const medProfile = buildIdentityProfile(month3Cov, month3Mems);
+  const medTrait = [...medProfile.strengths, ...medProfile.struggles].find(
+    (t) => t.confidence >= 0.42 && t.confidence < 0.60,
+  );
+  if (medTrait) {
+    ok(
+      medTrait.oathObservation.startsWith('OATH has noticed something.'),
+      `Confidence tiers: MEDIUM → "OATH has noticed something." (${medTrait.id} = ${medTrait.confidence.toFixed(3)})`,
+    );
+  } else {
+    ok(false, 'Confidence tiers: no MEDIUM-confidence trait found in month3 scenario');
+  }
+
+  // LOW (< 0.42): find a trait below the medium boundary
+  const lowProfile = buildIdentityProfile(month1Cov, month1Mems);
+  const lowTrait = [...lowProfile.strengths, ...lowProfile.struggles].find(
+    (t) => t.confidence < 0.42,
+  );
+  if (lowTrait) {
+    ok(
+      lowTrait.oathObservation.startsWith('The record may be suggesting something.'),
+      `Confidence tiers: LOW → "The record may be suggesting something." (${lowTrait.id} = ${lowTrait.confidence.toFixed(3)})`,
+    );
+  } else {
+    ok(false, 'Confidence tiers: no LOW-confidence trait found in month1 scenario');
+  }
+}
+
+section('Phase 7: No "you are" phrasing across all tiers');
+{
+  const profiles = [
+    buildIdentityProfile(week1Cov, week1Mems),
+    buildIdentityProfile(month1Cov, month1Mems),
+    buildIdentityProfile(month3Cov, month3Mems),
+    buildIdentityProfile(reinforceCov, reinforceMems),
+  ];
+  for (const p of profiles) {
+    const allObs = [
+      ...p.strengths.map((t) => t.oathObservation),
+      ...p.struggles.map((t) => t.oathObservation),
+      p.covenantAlignment.oathObservation,
+      p.mirrorObservation ?? '',
+    ].filter(Boolean);
+    const hasYouAre = allObs.some((o) => /\byou are\b/i.test(o));
+    ok(!hasYouAre, `Voice: no "you are" in profile with ${p.strengths.length + p.struggles.length} traits`);
+  }
+}
+
 // ── Done ───────────────────────────────────────────────────────────────────
 
 console.log('\n──────────────────────────────');

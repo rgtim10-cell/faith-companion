@@ -5,6 +5,7 @@ import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { StatusBar } from 'expo-status-bar';
 import { RealmProvider } from '@/context/RealmContext';
 import { CovenantProvider } from '@/context/CovenantContext';
+import { IdentityProvider } from '@/context/IdentityContext';
 import { DailyProvider } from '@/context/DailyContext';
 import { TheaterProvider } from '@/context/TheaterContext';
 import { InterventionProvider } from '@/context/InterventionContext';
@@ -28,16 +29,18 @@ export default function App() {
     <SafeAreaProvider>
       <RealmProvider>
         <CovenantProvider>
-          <DailyProvider>
-            <TheaterProvider>
-              <InterventionProvider>
-                <NavigationContainer theme={navTheme}>
-                  <StatusBar style="light" />
-                  <RootNavigator />
-                </NavigationContainer>
-              </InterventionProvider>
-            </TheaterProvider>
-          </DailyProvider>
+          <IdentityProvider>
+            <DailyProvider>
+              <TheaterProvider>
+                <InterventionProvider>
+                  <NavigationContainer theme={navTheme}>
+                    <StatusBar style="light" />
+                    <RootNavigator />
+                  </NavigationContainer>
+                </InterventionProvider>
+              </TheaterProvider>
+            </DailyProvider>
+          </IdentityProvider>
         </CovenantProvider>
       </RealmProvider>
     </SafeAreaProvider>

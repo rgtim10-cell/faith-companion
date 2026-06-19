@@ -27,6 +27,7 @@ import {
 import type { GuidanceResponse } from '@/engine/guidanceEngine';
 import { buildIdentityProfile } from '@/engine/identityEngine';
 import type { IdentityProfile } from '@/engine/identityEngine';
+import { useIdentity } from '@/context/IdentityContext';
 import type { MemoryRecord } from '@/data/memoryGraph';
 import { DEMO_SEEDS } from '@/data/demoSeeds';
 import { colors, spacing } from '@/design/tokens';
@@ -91,6 +92,8 @@ export function ManifestationCanvas() {
 
   // Identity state
   const [identityProfile, setIdentityProfile] = useState<IdentityProfile | null>(null);
+  const [identityEvidenceRevealing, setIdentityEvidenceRevealing] = useState(false);
+  const { suppressedTraitIds, challengedTraits, suppressTrait, challengeTrait } = useIdentity();
 
   const intensity = useRef(new Animated.Value(0.06)).current;
   const fade = useRef(new Animated.Value(1)).current;
@@ -146,6 +149,34 @@ export function ManifestationCanvas() {
   useEffect(() => () => { if (mirrorTimer.current) clearTimeout(mirrorTimer.current); }, []);
   useEffect(() => () => { sequenceTimers.current.forEach(clearTimeout); }, []);
 
+  const onRevealEvidence = useCallback((ids: string[]) => {
+    setIdentityEvidenceRevealing(true);
+    setGuidanceHighlights([]);
+    sequenceTimers.current.forEach(clearTimeout);
+    sequenceTimers.current = [];
+    let delay = 0;
+    ids.forEach((id) => {
+      delay += 500;
+      const t = setTimeout(() => {
+        setGuidanceHighlights((prev) => [...new Set([...prev, id])]);
+      }, delay);
+      sequenceTimers.current.push(t);
+    });
+  }, []);
+
+  const handleChallengeTrait = useCallback((traitId: string, note: string) => {
+    addMemory({
+      type: 'truth',
+      title: 'Correction to OATH',
+      content: note,
+      tags: ['correction', 'identity', traitId],
+      source: 'communion',
+      linkedPromiseId: covenant?.id,
+      emotionalWeight: 0.8,
+    });
+    challengeTrait(traitId, note);
+  }, [addMemory, challengeTrait, covenant]);
+
   const breatheTo = (value: number, duration = 1400) =>
     Animated.timing(intensity, { toValue: value, duration, easing: Easing.inOut(Easing.quad), useNativeDriver: true }).start();
 
@@ -172,7 +203,8 @@ export function ManifestationCanvas() {
     // The sky responds first; only after OATH has looked does it speak.
     if (mirrorTimer.current) clearTimeout(mirrorTimer.current);
     mirrorTimer.current = setTimeout(() => {
-      const profile = buildIdentityProfile(covenant, memories);
+      const challengedTraitIds = challengedTraits.map((c) => c.traitId);
+      const profile = buildIdentityProfile(covenant, memories, { suppressedTraitIds, challengedTraitIds });
       if (profile.mirrorLevel === 3 && profile.mirrorObservation) {
         // Level 3: OATH has observed identity — evidence stars light the sky.
         setIdentityProfile(profile);
@@ -205,6 +237,7 @@ export function ManifestationCanvas() {
       setTwinIds(null);
       setFollowUtterance('');
       setIdentityProfile(null);
+      setIdentityEvidenceRevealing(false);
       setState('silence');
     });
     breatheTo(0.06);
@@ -338,7 +371,7 @@ export function ManifestationCanvas() {
           memories={memories}
           covenant={covenant}
           highlightIds={highlightIds}
-          skyState={SKY_STATE[state]}
+          skyState={(state === 'identity' && identityEvidenceRevealing) ? 'noticing' : SKY_STATE[state]}
           twinIds={twinIds ?? undefined}
           onSelectStar={state === 'silence' ? onSelectStar : undefined}
         />
@@ -371,6 +404,10 @@ export function ManifestationCanvas() {
             H={H}
             onReturn={toSilence}
             onSpeak={() => toCommunion('speak')}
+            onSuppressTrait={suppressTrait}
+            onChallengeTrait={handleChallengeTrait}
+            onRevealEvidence={onRevealEvidence}
+            isRevealingEvidence={identityEvidenceRevealing}
             insetBottom={insets.bottom}
           />
         )}
@@ -427,6 +464,27 @@ export function ManifestationCanvas() {
             <Pressable onPress={() => setShowSeeds(false)} style={styles.seedCancel}>
               <Text style={styles.seedCancelText}>Close</Text>
             </Pressable>
+
+            {/* Dev-only: identity audit panel */}
+            {identityProfile && (
+              <>
+                <Text style={styles.auditTitle}>IDENTITY AUDIT</Text>
+                {[...identityProfile.strengths, ...identityProfile.struggles].map((t) => (
+                  <View key={t.id} style={styles.auditRow}>
+                    <Text style={styles.auditTraitId}>{t.id}</Text>
+                    <Text style={styles.auditDetail}>
+                      {t.kind} · conf {t.confidence.toFixed(3)} · {t.trajectory} · {t.evidenceCount} evidence
+                    </Text>
+                    <Text style={styles.auditDetail}>
+                      suppressed: {suppressedTraitIds.includes(t.id) ? 'YES' : 'no'} · challenged: {challengedTraits.some((c) => c.traitId === t.id) ? 'YES' : 'no'}
+                    </Text>
+                  </View>
+                ))}
+                <Text style={styles.auditDetail}>
+                  mirror level: {identityProfile.mirrorLevel} · alignment: {identityProfile.covenantAlignment.alignmentScore.toFixed(2)} ({identityProfile.covenantAlignment.recentTrend})
+                </Text>
+              </>
+            )}
           </View>
         </View>
       </Modal>
@@ -501,22 +559,35 @@ function MirrorField() {
 // ── IDENTITY MIRROR ─────────────────────────────────────────────────────────────
 // Level 3: OATH has watched long enough to observe identity. Not a summary —
 // an observation. Evidence stars are already glowing in the sky above.
+// Phase 7: 5-option challenge flow — user can correct, suppress, or affirm.
 function IdentityMirrorField({
   profile,
   H,
   onReturn,
   onSpeak,
+  onSuppressTrait,
+  onChallengeTrait,
+  onRevealEvidence,
+  isRevealingEvidence,
   insetBottom,
 }: {
   profile: IdentityProfile | null;
   H: number;
   onReturn: () => void;
   onSpeak: () => void;
+  onSuppressTrait: (traitId: string) => void;
+  onChallengeTrait: (traitId: string, note: string) => void;
+  onRevealEvidence: (ids: string[]) => void;
+  isRevealingEvidence: boolean;
   insetBottom: number;
 }) {
   const opacity = useRef(new Animated.Value(0)).current;
+  const [phase, setPhase] = useState<'observe' | 'correct'>('observe');
+  const [correctionNote, setCorrectionNote] = useState('');
 
   useEffect(() => {
+    setPhase('observe');
+    setCorrectionNote('');
     opacity.setValue(0);
     Animated.timing(opacity, {
       toValue: 1, duration: 900, delay: 300,
@@ -530,7 +601,20 @@ function IdentityMirrorField({
   }
 
   const { mirrorObservation, dominantStrength, dominantStruggle, covenantAlignment } = profile;
+  const primaryTrait = dominantStrength ?? dominantStruggle;
   const secondary = dominantStrength?.oathObservation ?? dominantStruggle?.oathObservation ?? '';
+
+  const evidenceIds = [
+    ...(dominantStrength?.evidenceIds ?? []),
+    ...(dominantStruggle?.evidenceIds ?? []),
+  ];
+
+  const submitCorrection = () => {
+    if (!correctionNote.trim() || !primaryTrait) return;
+    onChallengeTrait(primaryTrait.id, correctionNote.trim());
+    setCorrectionNote('');
+    onReturn();
+  };
 
   return (
     <View style={styles.fill}>
@@ -540,14 +624,82 @@ function IdentityMirrorField({
         pointerEvents="none"
       >
         <Text style={styles.identityObservation}>{mirrorObservation}</Text>
-        {!!secondary && (
+        {!!secondary && !isRevealingEvidence && (
           <Text style={styles.identitySecondary}>{secondary}</Text>
+        )}
+        {isRevealingEvidence && (
+          <Text style={styles.identitySecondary}>
+            The stars above are the moments OATH is referencing. {evidenceIds.length} in total.
+          </Text>
         )}
         <Text style={styles.identityAlignment}>{covenantAlignment.oathObservation}</Text>
       </Animated.View>
-      <View style={[styles.identityGlyph, { bottom: insetBottom + spacing.xl }]} pointerEvents="box-none">
-        <Pressable onPress={onSpeak} hitSlop={28}><Text style={styles.glyphDim}>◌</Text></Pressable>
-      </View>
+
+      {/* Challenge options — only in observe phase, not revealing */}
+      {phase === 'observe' && !isRevealingEvidence && (
+        <View style={[styles.identityOptions, { bottom: insetBottom + spacing.xl }]}>
+          <Pressable style={styles.identityOption} onPress={onReturn} hitSlop={8}>
+            <Text style={styles.identityOptionText}>That feels true</Text>
+          </Pressable>
+          <Pressable style={styles.identityOption} onPress={onReturn} hitSlop={8}>
+            <Text style={styles.identityOptionText}>Not quite</Text>
+          </Pressable>
+          <Pressable style={styles.identityOption} onPress={() => setPhase('correct')} hitSlop={8}>
+            <Text style={[styles.identityOptionText, styles.identityOptionChallenge]}>You're wrong</Text>
+          </Pressable>
+          {primaryTrait && (
+            <Pressable style={styles.identityOption} onPress={() => onRevealEvidence(evidenceIds)} hitSlop={8}>
+              <Text style={styles.identityOptionText}>Show me the evidence</Text>
+            </Pressable>
+          )}
+          {primaryTrait && (
+            <Pressable
+              style={styles.identityOption}
+              onPress={() => { onSuppressTrait(primaryTrait.id); onReturn(); }}
+              hitSlop={8}
+            >
+              <Text style={[styles.identityOptionText, styles.identityOptionDanger]}>Don't say this again</Text>
+            </Pressable>
+          )}
+        </View>
+      )}
+
+      {/* After evidence reveal: glyph to speak or return */}
+      {isRevealingEvidence && (
+        <View style={[styles.identityGlyph, { bottom: insetBottom + spacing.xl }]} pointerEvents="box-none">
+          <Pressable onPress={onSpeak} hitSlop={28}><Text style={styles.glyphDim}>◌</Text></Pressable>
+        </View>
+      )}
+
+      {/* Correction phase */}
+      {phase === 'correct' && (
+        <View style={[styles.identityCorrectPanel, { paddingBottom: insetBottom + spacing.xl }]}>
+          <Text style={styles.identityCorrectPrompt}>What should OATH understand differently?</Text>
+          <TextInput
+            // eslint-disable-next-line @typescript-eslint/no-explicit-any
+            style={[styles.identityCorrectInput, { outline: 'none', border: 'none', borderWidth: 0, boxShadow: 'none' } as any]}
+            value={correctionNote}
+            onChangeText={setCorrectionNote}
+            multiline
+            autoFocus
+            caretHidden
+            selectionColor="rgba(255,255,255,0.25)"
+            keyboardAppearance="dark"
+            placeholder="Speak the truth as you know it."
+            placeholderTextColor="rgba(255,255,255,0.20)"
+          />
+          <View style={styles.identityCorrectActions}>
+            <Pressable onPress={() => setPhase('observe')} hitSlop={20}>
+              <Text style={styles.communionBack}>back</Text>
+            </Pressable>
+            <Pressable onPress={submitCorrection} hitSlop={20} disabled={!correctionNote.trim()}>
+              <Text style={[styles.communionGive, { opacity: correctionNote.trim() ? 1 : 0.3 }]}>
+                give OATH your truth
+              </Text>
+            </Pressable>
+          </View>
+        </View>
+      )}
     </View>
   );
 }
@@ -769,6 +921,45 @@ const styles = StyleSheet.create({
   identitySecondary: { fontSize: 16, lineHeight: 26, color: 'rgba(255,255,255,0.52)', letterSpacing: -0.1 },
   identityAlignment: { fontSize: 14, lineHeight: 23, color: 'rgba(255,255,255,0.30)', fontStyle: 'italic', letterSpacing: 0.1 },
   identityGlyph: { position: 'absolute', left: spacing.xl },
+  identityOptions: {
+    position: 'absolute',
+    left: spacing.xl,
+    right: spacing.xl,
+    gap: spacing.xs,
+  },
+  identityOption: {
+    paddingVertical: spacing.sm,
+    borderBottomWidth: StyleSheet.hairlineWidth,
+    borderBottomColor: 'rgba(255,255,255,0.08)',
+  },
+  identityOptionText: { fontSize: 15, color: 'rgba(255,255,255,0.60)', letterSpacing: 0.1 },
+  identityOptionChallenge: { color: 'rgba(255,200,120,0.80)' },
+  identityOptionDanger: { color: 'rgba(255,100,100,0.60)' },
+  identityCorrectPanel: {
+    position: 'absolute',
+    left: 0,
+    right: 0,
+    bottom: 0,
+    paddingHorizontal: spacing.xl,
+    paddingTop: spacing.xl,
+    gap: spacing.lg,
+    backgroundColor: 'rgba(4,5,10,0.85)',
+  },
+  identityCorrectPrompt: { fontSize: 14, color: 'rgba(255,255,255,0.35)', letterSpacing: 0.4 },
+  identityCorrectInput: {
+    fontSize: 22,
+    lineHeight: 34,
+    color: colors.text,
+    fontWeight: '300',
+    letterSpacing: -0.4,
+    minHeight: 70,
+  },
+  identityCorrectActions: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    paddingTop: spacing.sm,
+  },
 
   // Manifestation
   manifest: { flex: 1, paddingHorizontal: spacing.xl, gap: spacing.lg },
@@ -829,6 +1020,12 @@ const styles = StyleSheet.create({
     letterSpacing: 0.3,
     paddingBottom: 2,
   },
+
+  // Audit panel (dev only)
+  auditTitle: { fontSize: 10, fontWeight: '700', letterSpacing: 3, color: 'rgba(255,200,100,0.5)', marginTop: spacing.lg },
+  auditRow: { paddingVertical: spacing.xs, borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: 'rgba(255,255,255,0.06)' },
+  auditTraitId: { fontSize: 12, color: 'rgba(255,255,255,0.55)', fontWeight: '600' },
+  auditDetail: { fontSize: 11, color: 'rgba(255,255,255,0.30)', letterSpacing: 0.2, marginTop: 2 },
 
   // Seed loader (experiment only)
   seedOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.85)', justifyContent: 'center', padding: spacing.xl },

@@ -50,6 +50,20 @@ export interface IdentityProfile {
   mirrorObservation: string | null;
 }
 
+/**
+ * Options that let the calling context suppress or penalize specific traits
+ * based on prior user feedback. The engine remains pure — no state mutation.
+ *
+ * suppressedTraitIds: omit these traits entirely (user said "don't say this again").
+ * challengedTraitIds: apply 0.70× confidence penalty (user said "you're wrong").
+ *   A challenged trait may still surface if evidence is strong, but at lower confidence.
+ *   A very low-confidence trait may fall below SURFACE_THRESHOLD and disappear entirely.
+ */
+export interface IdentityOptions {
+  suppressedTraitIds?: string[];
+  challengedTraitIds?: string[];
+}
+
 // ── Trait signatures ──────────────────────────────────────────────────────────
 // Each signature defines what evidence counts toward a trait.
 // typeWeights: multiplier applied to base support. 0 = type doesn't contribute.
@@ -175,6 +189,14 @@ const LEVEL3_SPAN_DAYS = 30;
 const LEVEL3_MIN_EVIDENCE = 5;
 const MIN_EVIDENCE = 3;
 const MIN_SPAN_DAYS = 7;
+const CHALLENGE_PENALTY = 0.70;
+
+// Confidence tier thresholds — control the epistemic register of OATH's language.
+// Low (< 0.42):  "The record may be suggesting..."
+// Medium (< 0.60): "OATH has noticed..."
+// High (≥ 0.60):  "This pattern has become difficult to ignore."
+const CONFIDENCE_MEDIUM = 0.42;
+const CONFIDENCE_HIGH = 0.60;
 
 interface EvidencePoint {
   id: string;
@@ -237,37 +259,50 @@ function computeTrajectory(evidence: EvidencePoint[], now: number): Trajectory {
 
 // ── Trait observation strings ─────────────────────────────────────────────────
 // Never "you are X." Always "OATH has noticed / the record suggests / this appears."
+// Opening phrase is keyed to confidence tier — sets the epistemic register before
+// the trajectory-specific body lands.
 
 function traitObservation(
   sig: TraitSignature,
   count: number,
   spanDays: number,
   trajectory: Trajectory,
+  confidence: number,
 ): string {
   const c = count;
   const s = spanDays;
 
+  // The opening phrase communicates how certain OATH is — not a verdict, a calibrated observation.
+  let opening: string;
+  if (confidence < CONFIDENCE_MEDIUM) {
+    opening = 'The record may be suggesting something.';
+  } else if (confidence < CONFIDENCE_HIGH) {
+    opening = 'OATH has noticed something.';
+  } else {
+    opening = 'This pattern has become difficult to ignore.';
+  }
+
   if (sig.kind === 'strength') {
     switch (trajectory) {
       case 'emerging':
-        return `OATH has been noticing something in the recent record. Not what you said — what you did. ${sig.label} is beginning to appear with a frequency that OATH cannot dismiss.`;
+        return `${opening} Not what you said — what you did. ${sig.label} is beginning to appear with a frequency that OATH cannot dismiss.`;
       case 'strengthening':
-        return `The record is building a case. ${sig.label} has appeared across ${c} separate moments, and OATH has watched it grow stronger over the last ${s} days. This is no longer a coincidence.`;
+        return `${opening} ${sig.label} has appeared across ${c} separate moments, and OATH has watched it grow stronger over the last ${s} days. This is no longer a coincidence.`;
       case 'stable':
-        return `OATH has been holding this observation for ${s} days. ${sig.label} keeps appearing — not in what you claim, but in what you do when it is hard. The record now says this ${c} times.`;
+        return `${opening} ${sig.label} keeps appearing — not in what you claim, but in what you do when it is hard. The record now says this ${c} times.`;
       case 'fading':
-        return `Something is shifting. ${sig.label} appeared consistently across your record — and then recently, less so. OATH is watching this gap.`;
+        return `${opening} ${sig.label} appeared consistently across the record — and recently, less so. OATH is watching this.`;
     }
   } else {
     switch (trajectory) {
       case 'emerging':
-        return `OATH has noticed a new pattern in the recent record. ${sig.label} is appearing — not once, but repeatedly. This is worth paying attention to.`;
+        return `${opening} ${sig.label} is appearing — not once, but repeatedly. Worth paying attention to.`;
       case 'strengthening':
-        return `The record keeps returning to the same place. ${sig.label} has appeared across ${c} moments, spanning ${s} days. OATH is not judging — but OATH cannot look away.`;
+        return `${opening} ${sig.label} has appeared across ${c} moments, spanning ${s} days. OATH is not judging — but OATH cannot look away.`;
       case 'stable':
-        return `${sig.label} is a recurring presence in the record. OATH has found it ${c} times across ${s} days. Not a verdict. A pattern that wants to be seen.`;
+        return `${opening} ${sig.label} is a recurring presence in the record. OATH has found it ${c} times across ${s} days. Not a verdict. A pattern that wants to be seen.`;
       case 'fading':
-        return `Something has changed. ${sig.label} was present earlier in the record — and recently, it has appeared less. The record suggests you are moving through it.`;
+        return `${opening} ${sig.label} was present earlier in the record — and recently, it has appeared less. The record suggests something is shifting.`;
     }
   }
 }
@@ -278,6 +313,7 @@ function buildTrait(
   sig: TraitSignature,
   memories: MemoryRecord[],
   now: number,
+  isChallenged = false,
 ): IdentityTrait | null {
   const evidence = collectEvidence(memories, sig);
   if (evidence.length < MIN_EVIDENCE) return null;
@@ -291,7 +327,11 @@ function buildTrait(
   const evidenceFactor = Math.min(1, evidence.length / 8);
   const spanFactor = Math.min(1, spanDays / 45);
 
-  const confidence = avgSupport * 0.45 + evidenceFactor * 0.35 + spanFactor * 0.20;
+  // Apply challenge penalty BEFORE the surface-threshold check so that a user
+  // correction can suppress a marginal trait while a genuinely strong one still
+  // surfaces — at reduced confidence.
+  const rawConfidence = avgSupport * 0.45 + evidenceFactor * 0.35 + spanFactor * 0.20;
+  const confidence = rawConfidence * (isChallenged ? CHALLENGE_PENALTY : 1.0);
   if (confidence < SURFACE_THRESHOLD) return null;
 
   const trajectory = computeTrajectory(evidence, now);
@@ -309,7 +349,7 @@ function buildTrait(
     spanDays,
     trajectory,
     evidenceIds,
-    oathObservation: traitObservation(sig, evidence.length, spanDays, trajectory),
+    oathObservation: traitObservation(sig, evidence.length, spanDays, trajectory, confidence),
   };
 }
 
@@ -430,7 +470,7 @@ function composeMirrorObservation(
   } else if (kind === 'struggle' && (trajectory === 'stable' || trajectory === 'strengthening')) {
     bridge = `OATH is not naming this as who you are. OATH is naming it as something the record keeps returning to — and that pattern deserves to be seen.`;
   } else if (kind === 'strength' && trajectory === 'strengthening') {
-    bridge = `This has appeared ${evidenceCount} times. Across ${spanDays} days. That is not personality. That is practice.`;
+    bridge = `The record counts it ${evidenceCount} times. Across ${spanDays} days. That is not personality. That is practice.`;
   }
 
   return [hook, bridge].filter(Boolean).join('\n\n');
@@ -475,17 +515,23 @@ function computeMirrorLevel(
  * - Minimum 3 supporting memories before any trait is surfaced
  * - Minimum 7-day span (no identity claim from a single week)
  * - Confidence ≥ 0.28 to appear; ≥ 0.50 for Level 3 Mirror
- * - Traits with contradicting evidence (struggle + strength from same tags) are de-weighted
+ * - Suppressed traits are omitted entirely — OATH can still use the memories,
+ *   but will not phrase that identity observation to the user again
+ * - Challenged traits have 0.70× confidence — may still surface if evidence is
+ *   strong enough, but at a lower register; user correction is respected
  * - Struggles presented with fading/stable/strengthening nuance — never as verdict
  */
 export function buildIdentityProfile(
   covenant: Covenant | null,
   memories: MemoryRecord[],
+  options: IdentityOptions = {},
 ): IdentityProfile {
+  const { suppressedTraitIds = [], challengedTraitIds = [] } = options;
   const now = Date.now();
 
   const traits: IdentityTrait[] = SIGNATURES
-    .map((sig) => buildTrait(sig, memories, now))
+    .filter((sig) => !suppressedTraitIds.includes(sig.id))
+    .map((sig) => buildTrait(sig, memories, now, challengedTraitIds.includes(sig.id)))
     .filter((t): t is IdentityTrait => t !== null)
     .sort((a, b) => b.confidence - a.confidence);
 
