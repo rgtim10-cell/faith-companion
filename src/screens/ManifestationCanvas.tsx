@@ -34,6 +34,7 @@ import { colors, spacing } from '@/design/tokens';
 
 const MemorySky = React.lazy(() => import('@/components/ui/MemorySky'));
 const ParticleField = React.lazy(() => import('@/components/ui/ParticleField'));
+const DriftField = React.lazy(() => import('@/components/ui/DriftField'));
 
 // Remove browser focus ring on web — textarea:focus outline is a web artifact.
 // Native (iOS/Android) is unaffected.
@@ -78,6 +79,19 @@ const SKY_STATE: Record<CanvasState, 'silent' | 'noticing' | 'speaking' | 'remem
 // OATH speaking → field opens & brightens; a single memory held → field stills.
 const FIELD_MODE: Record<CanvasState, 'rest' | 'gather' | 'speaking' | 'still'> = {
   silence: 'rest',
+  memory: 'still',
+  mirror: 'gather',
+  identity: 'speaking',
+  manifestation: 'speaking',
+  communion: 'gather',
+  guidance_recall: 'gather',
+  guidance_speak: 'speaking',
+};
+
+// The Drift ecosystem (§8.2) uses the same semantic mapping but drives
+// orbital speed rather than gather/brightness/drift controls.
+const DRIFT_MODE: Record<CanvasState, 'idle' | 'gather' | 'speaking' | 'still'> = {
+  silence: 'idle',
   memory: 'still',
   mirror: 'gather',
   identity: 'speaking',
@@ -381,9 +395,14 @@ export function ManifestationCanvas() {
         <Pressable style={styles.fill} onPress={enterMirror} />
       )}
 
-      {/* OATH's resting body — the living particle field beneath the record. */}
+      {/* Layer 1: ambient particle haze — the atmosphere OATH inhabits. */}
       <Suspense fallback={null}>
         <ParticleField mode={FIELD_MODE[state]} />
+      </Suspense>
+
+      {/* Layer 2: orbital ecosystem — matter under covenant gravity (§8.2). */}
+      <Suspense fallback={null}>
+        <DriftField mode={DRIFT_MODE[state]} />
       </Suspense>
 
       <Suspense fallback={null}>
